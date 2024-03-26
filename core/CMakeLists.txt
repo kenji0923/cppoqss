@@ -9,7 +9,10 @@ target_include_directories(Unit INTERFACE include)
 add_library(Logger logger.cc include/cppoqss/logger.h)
 target_include_directories(Logger PUBLIC include)
 target_link_libraries(Logger PUBLIC
+    MPI::MPI_CXX
     PkgConfig::PETSC
+)
+target_link_libraries(Logger PRIVATE
 )
 
 
@@ -17,6 +20,7 @@ add_library(MPIHelper mpi_helper.cc include/cppoqss/mpi_helper.h)
 target_include_directories(MPIHelper PUBLIC include)
 target_link_libraries(MPIHelper PUBLIC
     Boost::mpi
+    MPI::MPI_CXX
 )
 target_link_libraries(MPIHelper PRIVATE
     PkgConfig::PETSC
