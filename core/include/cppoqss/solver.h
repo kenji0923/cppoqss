@@ -130,7 +130,7 @@ public:
     ObservationPointList get_obspoints_constant_interval(const double t_end, const double dt, const unsigned int steps_per_save) const;
 
     auto get_constant_stepper() const;
-    auto get_adaptive_stepper(const double eps_rel, const double eps_abs=DBL_MAX) const;
+    auto get_adaptive_stepper(const double eps_rel, double eps_abs=DBL_MAX) const;
 
     template<class StepperType>
     size_t solve(ObservationPointList& obs_points, StepperType& stepper);
@@ -259,7 +259,7 @@ void Solver<StateType, SystemType>::Observer::operator()(const typename SystemTy
 
     if (mpi_helper::is_printing_rank()) {
 	char time_str[128];
-	sprintf(time_str, "t=%3.2ens                                       ", t / u::ns);
+	snprintf(time_str, std::size(time_str), "t=%3.2ens                                       ", t / u::ns);
 	update_progress_bar(time_str, t);
     }
 
@@ -276,7 +276,7 @@ void Solver<StateType, SystemType>::Observer::record_time_step(const double t, c
 
     if (mpi_helper::is_printing_rank()) {
 	char time_str[128];
-	sprintf(time_str, "t=%3.2ens dt=%2.1eps                           ", t/u::ns, dt/u::ps);
+	snprintf(time_str, std::size(time_str), "t=%3.2ens dt=%2.1eps                           ", t/u::ns, dt/u::ps);
 	update_progress_bar(time_str, t);
     }
 }
@@ -289,7 +289,7 @@ void Solver<StateType, SystemType>::Observer::record_failed_time_step(const doub
 
     if (mpi_helper::is_printing_rank()) {
 	char time_str[128];
-	sprintf(time_str, "t=%3.2ens dt=%2.1eps->%2.1eps at t=%3.2ens", t/u::ns, dt_tried/u::ps, dt_new/u::ps, t/u::ns);
+	snprintf(time_str, std::size(time_str), "t=%3.2ens dt=%2.1eps->%2.1eps at t=%3.2ens", t/u::ns, dt_tried/u::ps, dt_new/u::ps, t/u::ns);
 	update_progress_bar(time_str, t);
     }
 }

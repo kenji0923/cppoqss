@@ -576,6 +576,7 @@ void MyMat::loop_over_elements(std::function<void(const MyIndexType i, const MyI
 
 void MyMat::loop_by_row(std::function<void(const MyIndexType, const MyIndexType, const MyIndexType*, const MyElementType*)> process) const
 {
+  if (is_hermite_) MatGetRowUpperTriangular(mat_);
   for (MyIndexType i = ownership_info_.range_row[0]; i < ownership_info_.range_row[1]; ++i) {
     MyIndexType ncols;
     const MyIndexType *cols;
@@ -585,6 +586,7 @@ void MyMat::loop_by_row(std::function<void(const MyIndexType, const MyIndexType,
     process(i, ncols, cols, vals);
     MatRestoreRow(mat_, i, &ncols, &cols, &vals);
   }
+  if (is_hermite_) MatRestoreRowUpperTriangular(mat_);
 }
 
 void MyMat::loop_over_nonzero_elements(std::function<void(const MyIndexType i, const MyIndexType j, const MyElementType element)> process) const

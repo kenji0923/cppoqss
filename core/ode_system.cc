@@ -687,6 +687,8 @@ void OdeLindbladMasterMPI::fill_liouvillian(const double t, MyMat& Drho_Dt, MyVe
 	orig_rho_.loop_by_row(
 		[&Drho_Dt, &gamma_from_i_received](const MyIndexType i, const MyIndexType n_col, const MyIndexType* cols_ptr, const MyElementType* values_ptr)
 		{
+		    if (n_col == 0) return;
+
 		    std::vector<MyIndexType> fill_cols;
 		    std::vector<MyElementType> fill_values;
 
@@ -756,10 +758,14 @@ ErrorState abs(const OdeLindbladMasterMPI::State& x)
 
   x.get_rho().loop_by_row(
       [&abs_rho](const MyIndexType i, const MyIndexType n_col, const MyIndexType* cols_ptr, const MyElementType* values_ptr) {
+	if (n_col == 0) return;
+
         std::vector<MyElementType> abs_rho_values(n_col);
+
         for (MyIndexType jj = 0; jj < n_col; ++jj) {
           abs_rho_values[jj] = std::abs(values_ptr[jj]);
         }
+
         abs_rho.set_values(1, &i, n_col, cols_ptr, &abs_rho_values[0]);
       }
     );
