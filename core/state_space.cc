@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <boost/archive/text_iarchive.hpp>
+#include <boost/archive/text_oarchive.hpp>
 
 #include <cppoqss/arithmetic.h>
 #include <cppoqss/mpi_helper.h>
@@ -130,6 +131,37 @@ const std::string& StateSpace::get_outer_state_name(const MyIndexType index) con
 }
 
 
+template<class Archive>
+void save_construct_data(Archive& ar, const StateSpace* t, const unsigned int version)
+{
+    // ar << t->state_spaces_;
+    // ar << t->c_operators_;
+    ar << t->hamiltonian_;
+    ar << t->index_getter_type_;
+}
+
+
+template<class Archive>
+void load_construct_data(Archive& ar, StateSpace* t, const unsigned int version)
+{
+    std::vector<std::unique_ptr<const cppoqss::ISingleStateSpace>> state_spaces;
+    std::vector<std::unique_ptr<const cppoqss::ICOperator>> c_operators;
+    std::shared_ptr<cppoqss::IOperator> hamiltonian;
+    cppoqss::StateSpace::IndexGetterType index_getter_type;
+
+    // ar >> state_spaces;
+    // ar >> c_operators;
+    ar >> hamiltonian;
+    ar >> index_getter_type;
+
+    ::new(t)StateSpace(std::move(state_spaces), std::move(c_operators), hamiltonian, index_getter_type);
+}
+
+
+template void save_construct_data(boost::archive::text_oarchive& ar, const StateSpace* t, const unsigned int version);
+template void load_construct_data(boost::archive::text_iarchive& ar, StateSpace* t, const unsigned int version);
+
+
 void StateSpace::initialize()
 {
     n_space_ = state_spaces_.size();
@@ -171,3 +203,9 @@ void StateSpace::initialize()
 
 
 } // namespace cppoqss
+
+
+#include <boost/serialization/export.hpp>
+
+
+BOOST_CLASS_EXPORT_IMPLEMENT(cppoqss::IOperator)

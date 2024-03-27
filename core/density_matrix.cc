@@ -26,7 +26,7 @@ DensityMatrix::DensityMatrix(
 	const std::shared_ptr<const StateSpace>& state_space,
 	std::function<MyElementType(const StateSpace&, const MyIndexType, const MyIndexType)> rho_element_getter
 	)
-    : n_dim_rho_(state_space->get_n_dim_rho()), n_dim_phi_(state_space->get_n_dim_phi()), rho_(n_dim_rho_), phi_(n_dim_phi_), t_(0.0), state_space_(*state_space), const_rho_(rho_), const_phi_(phi_)
+    : ptr_state_space_(state_space), n_dim_rho_(state_space->get_n_dim_rho()), n_dim_phi_(state_space->get_n_dim_phi()), rho_(n_dim_rho_), phi_(n_dim_phi_), t_(0.0), state_space_(*state_space), const_rho_(rho_), const_phi_(phi_)
 {
     //
     // Start initializing rho.

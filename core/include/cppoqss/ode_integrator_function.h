@@ -1,20 +1,17 @@
 #ifndef ODE_INTEGRATOR_FUNCTION_H 
 #define ODE_INTEGRATOR_FUNCTION_H 
 
+
 #include <boost/numeric/odeint.hpp>
 #include <boost/numeric/odeint/util/detail/less_with_sign.hpp>
 
 
-namespace cppoqss {
-
-
-namespace core {
+namespace cppoqss { namespace ode_integrator_function {
 
 
 /**
  * Customized for process inside steps and error calculation
  */
-namespace ode_integrator_function {
 
 
 using namespace boost::numeric;
@@ -487,21 +484,20 @@ size_t integrate_times(
 	    observer , stepper_category() );
 }
 
-}; // ode_integrator_function
+} // ode_integrator_function
 
-}; // core
-}; // cppoqss
+} // namespace cppoqss
 
-namespace boost {
-namespace numeric {
-namespace odeint {
+
+namespace boost { namespace numeric { namespace odeint {
+
 
 // controller factory for controlled_runge_kutta_spmat
 template< class Stepper >
-struct controller_factory< Stepper , cppoqss::core::ode_integrator_function::controlled_runge_kutta_spmat< Stepper > >
+struct controller_factory< Stepper , cppoqss::ode_integrator_function::controlled_runge_kutta_spmat< Stepper > >
 {
     typedef Stepper stepper_type;
-    typedef cppoqss::core::ode_integrator_function::controlled_runge_kutta_spmat< stepper_type > controller_type;
+    typedef cppoqss::ode_integrator_function::controlled_runge_kutta_spmat< stepper_type > controller_type;
     typedef typename controller_type::error_checker_type error_checker_type;
     typedef typename controller_type::step_adjuster_type step_adjuster_type;
     typedef typename stepper_type::value_type value_type;
@@ -521,9 +517,8 @@ struct controller_factory< Stepper , cppoqss::core::ode_integrator_function::con
     }
 };
 
-}; // odeint
-}; // numeric
-}; // boost
+
+}}} // namespace boost::numeric::odeint
+
 
 #endif
-

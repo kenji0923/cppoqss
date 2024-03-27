@@ -35,6 +35,8 @@ public:
     const MyVec& get_phi() const { return phi_; }
     double get_t() const { return t_; }
 
+    const std::shared_ptr<const StateSpace> ptr_state_space_;
+
 private:
     const MyIndexType n_dim_rho_;
     const MyIndexType n_dim_phi_;

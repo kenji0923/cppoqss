@@ -1,9 +1,10 @@
-#ifndef SOLVER_H
-#define SOLVER_H
+#ifndef CPPOQSS_SOLVER_H
+#define CPPOQSS_SOLVER_H
 
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <filesystem>
@@ -11,6 +12,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -24,7 +26,6 @@
 
 #include <cppoqss/c_operator.h>
 #include <cppoqss/density_matrix.h>
-#include <cppoqss/helper.h>
 #include <cppoqss/logger.h>
 #include <cppoqss/ode_integrator_function.h>
 #include <cppoqss/operator.h>
@@ -33,7 +34,7 @@
 #include <cppoqss/unit.h>
 
 
-namespace cppoqss { namespace core {
+namespace cppoqss {
 
 
 template<class StepperType>
@@ -313,7 +314,12 @@ Solver<StateType, SystemType>::Solver(StateType& state, const std::string& resul
     if (mpi_helper::is_manager_rank()) {
 	std::filesystem::create_directories(result_base_dir);
 
-	std::string result_dir_name = std::string(save_dir_title.c_str()) + "_" + helper::get_timestamp();
+	std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+	std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+	std::stringstream ss_timestamp;
+	ss_timestamp << std::put_time(localtime(&now_c), "%Y-%m-%d-%H%M%S");
+
+	std::string result_dir_name = std::string(save_dir_title.c_str()) + "_" + ss_timestamp.str();
 	save_dir_ = result_base_dir / result_dir_name;
 
 	if (std::filesystem::is_directory(save_dir_)) {
@@ -328,7 +334,7 @@ Solver<StateType, SystemType>::Solver(StateType& state, const std::string& resul
 	{
 	    std::ofstream ofs((save_dir_ / "state_space.dat").c_str());
 	    boost::archive::text_oarchive oa(ofs);
-	    oa << state.state_space_;
+	    oa << state.ptr_state_space_;
 	}
 
 	{
@@ -466,7 +472,7 @@ double Solver<StateType, SystemType>::get_default_eps_abs(const double eps_rel, 
 }
 
 
-}} // namespace cppoqss::core
+} // namespace cppoqss
 
 
 #endif

@@ -9,7 +9,7 @@
 #include <cppoqss/result_analyzer.h>
 
 
-namespace cppoqss { namespace core {
+namespace cppoqss {
 
 
 ResultAnalyzerUsingROOT::ResultAnalyzerUsingROOT(const std::filesystem::path& read_path, const std::filesystem::path& solved_dir)
@@ -112,4 +112,4 @@ std::vector<TGraph*> ResultAnalyzerUsingROOT::get_phi_time_evolution_graph(const
 }
 
 
-}} // namespace cppoqss::core
+} // namespace cppoqss

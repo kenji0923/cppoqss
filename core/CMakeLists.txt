@@ -46,10 +46,19 @@ target_link_libraries(Arithmetic  PUBLIC
 )
 
 
+add_library(StateSpaceSerializer INTERFACE include/cppoqss/state_space_serializer_definition.h)
+target_include_directories(StateSpaceSerializer INTERFACE include)
+target_link_libraries(StateSpaceSerializer INTERFACE
+    Boost::serialization
+)
+
+
 add_library(StateSpace state_space.cc include/cppoqss/state_space.h)
 target_include_directories(StateSpace PUBLIC include)
+target_link_libraries(StateSpace INTERFACE
+    StateSpaceSerializer
+)
 target_link_libraries(StateSpace PUBLIC
-    Boost::filesystem
     Boost::serialization
 
     Arithmetic 
@@ -170,16 +179,16 @@ if (${ROOT_FOUND})
 endif()
 
 
-add_library(CppoqssSimulator INTERFACE)
-target_link_libraries(CppoqssSimulator INTERFACE Solver OdeSystem COperator Operator DensityMatrix StateSpace)
+add_library(Simulator INTERFACE)
+target_link_libraries(Simulator INTERFACE Solver OdeSystem COperator Operator DensityMatrix StateSpace)
 
-add_library(CppoqssAnalyzer INTERFACE)
-target_link_libraries(CppoqssAnalyzer INTERFACE ResultAnalyzer)
+add_library(Analyzer INTERFACE)
+target_link_libraries(Analyzer INTERFACE ResultAnalyzer)
 if (${ROOT_FOUND})
-    target_link_libraries(CppoqssAnalyzer INTERFACE ResultAnalyzerUsingROOT)
+    target_link_libraries(Analyzer INTERFACE ResultAnalyzerUsingROOT)
 endif()
 
 
-add_library(cppoqss::Simulator ALIAS CppoqssSimulator)
+add_library(cppoqss::Simulator ALIAS Simulator)
 
-add_library(cppoqss::Analyzer ALIAS CppoqssAnalyzer)
+add_library(cppoqss::Analyzer ALIAS Analyzer)

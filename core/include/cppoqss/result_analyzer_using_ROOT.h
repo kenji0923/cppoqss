@@ -1,5 +1,5 @@
-#ifndef RESULT_ANALYZER_USING_ROOT_H
-#define RESULT_ANALYZER_USING_ROOT_H
+#ifndef CPPOQSS_RESULT_ANALYZER_USING_ROOT_H
+#define CPPOQSS_RESULT_ANALYZER_USING_ROOT_H
 
 
 #include <filesystem>
@@ -10,7 +10,7 @@
 #include <cppoqss/result_analyzer.h>
 
 
-namespace cppoqss { namespace core {
+namespace cppoqss {
 
 
 class ResultAnalyzerUsingROOT
@@ -29,7 +29,7 @@ private:
 };
 
 
-}} // namespace cppoqss::core
+} // namespace cppoqss
 
 
 #endif

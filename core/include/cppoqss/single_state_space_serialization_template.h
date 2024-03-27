@@ -1,0 +1,1 @@
+#ifdef CPPOQSS_DECLARE

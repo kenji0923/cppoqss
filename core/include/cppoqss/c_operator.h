@@ -1,5 +1,5 @@
-#ifndef C_OPERATOR_H
-#define C_OPERATOR_H
+#ifndef CPPOQSS_C_OPERATOR_H
+#define CPPOQSS_C_OPERATOR_H
 
 
 #include <cstddef>
@@ -19,7 +19,7 @@
 #include <cppoqss/state_space.h>
 
 
-namespace cppoqss { namespace core {
+namespace cppoqss {
 
 
 /**
@@ -268,7 +268,7 @@ void RuntimeCalculatingConstantCOperator<SourceInfoType, TargetInfoType>::serial
 }
 
 
-}} // namespace cppoqss::core
+} // namespace cppoqss
 
 
 #endif

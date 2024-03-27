@@ -11,8 +11,9 @@
 #include <string>
 #include <unordered_map>
 
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/archive/text_oarchive.hpp>
 #include <boost/serialization/base_object.hpp>
-#include <boost/serialization/export.hpp>
 
 #include <cppoqss/arithmetic.h>
 #include <cppoqss/state_space.h>
@@ -121,11 +122,8 @@ private:
 };
 
 
-template<class Archive>
-void Zero::serialize(Archive& ar, const unsigned int version)
-{
-    ar & boost::serialization::base_object<IOperator>(*this);
-}
+extern template void Zero::serialize(boost::archive::text_iarchive& ar, const unsigned int version);
+extern template void Zero::serialize(boost::archive::text_oarchive& ar, const unsigned int version);
 
 
 class One : public IOperator
@@ -143,14 +141,18 @@ private:
 };
 
 
-template<class Archive>
-void One::serialize(Archive& ar, const unsigned int version)
-{
-    ar & boost::serialization::base_object<IOperator>(*this);
-}
+extern template void One::serialize(boost::archive::text_iarchive& ar, const unsigned int version);
+extern template void One::serialize(boost::archive::text_oarchive& ar, const unsigned int version);
 
 
 } // namespace special_operator
+
+
+class SumOperator;
+
+
+template<class Archive> void save_construct_data(Archive& ar, const SumOperator* t, const unsigned int version);
+template<class Archive> void load_construct_data(Archive& ar, SumOperator* t, const unsigned int version);
 
 
 class SumOperator : public IOperator 
@@ -166,27 +168,28 @@ private:
     friend class boost::serialization::access;
 
     template<class Archive>
-    friend void save_construct_data(Archive& ar, const SumOperator* t, const unsigned int version)
-    {
-	ar << t->op1_;
-	ar << t->op2_;
-    }
+    friend void save_construct_data(Archive& ar, const SumOperator* t, const unsigned int version);
 
     template<class Archive>
-    void serialize(Archive& ar, const unsigned int version);
+    friend void load_construct_data(Archive& ar, cppoqss::SumOperator* t, const unsigned int version);
+
+    template<class Archive>
+    void serialize(Archive& ar, const unsigned int version) { }
 
     std::shared_ptr<const IOperator> op1_;
     std::shared_ptr<const IOperator> op2_;
 };
 
 
-template<class Archive>
-void SumOperator::serialize(Archive& ar, const unsigned int version)
-{
-    ar & boost::serialization::base_object<IOperator>(*this);
-    ar & op1_;
-    ar & op2_;
-}
+extern template void save_construct_data(boost::archive::text_oarchive& ar, const SumOperator* t, const unsigned int version);
+extern template void load_construct_data(boost::archive::text_iarchive& ar, SumOperator* t, const unsigned int version);
+
+
+class ProductOperator;
+
+
+template<class Archive> void save_construct_data(Archive& ar, const ProductOperator* t, const unsigned int version);
+template<class Archive> void load_construct_data(Archive& ar, ProductOperator* t, const unsigned int version);
 
 
 class ProductOperator : public IOperator 
@@ -202,27 +205,21 @@ private:
     friend class boost::serialization::access;
 
     template<class Archive>
-    friend void save_construct_data(Archive& ar, const ProductOperator* t, const unsigned int version)
-    {
-	ar << t->op1_;
-	ar << t->op2_;
-    }
+    friend void save_construct_data(Archive& ar, const ProductOperator* t, const unsigned int version);
 
     template<class Archive>
-    void serialize(Archive& ar, const unsigned int version);
+    friend void load_construct_data(Archive& ar, cppoqss::ProductOperator* t, const unsigned int version);
+
+    template<class Archive>
+    void serialize(Archive& ar, const unsigned int version) { }
 
     std::shared_ptr<const IOperator> op1_;
     std::shared_ptr<const IOperator> op2_;
 };
 
 
-template<class Archive>
-void ProductOperator::serialize(Archive& ar, const unsigned int version)
-{
-    ar & boost::serialization::base_object<IOperator>(*this);
-    ar & op1_;
-    ar & op2_;
-}
+extern template void save_construct_data(boost::archive::text_oarchive& ar, const ProductOperator* t, const unsigned int version);
+extern template void load_construct_data(boost::archive::text_iarchive& ar, ProductOperator* t, const unsigned int version);
 
 
 std::shared_ptr<IOperator> operator+(const std::shared_ptr<const IOperator>& op1, const std::shared_ptr<const IOperator>& op2);
@@ -234,40 +231,7 @@ std::shared_ptr<IOperator> operator*(const std::shared_ptr<const IOperator>& op1
 } // namespace cppoqss
 
 
-namespace boost { namespace serialization {
-
-
-template<class Archive>
-inline void load_construct_data(
-	Archive& ar, cppoqss::SumOperator* t, const unsigned int version
-    )
-{
-    std::shared_ptr<const cppoqss::IOperator> op1_;
-    std::shared_ptr<const cppoqss::IOperator> op2_;
-
-    ar >> op1_;
-    ar >> op2_;
-
-    ::new(t)cppoqss::SumOperator(op1_, op2_);
-}
-
-
-template<class Archive>
-inline void load_construct_data(
-	Archive& ar, cppoqss::ProductOperator* t, const unsigned int version
-    )
-{
-    std::shared_ptr<const cppoqss::IOperator> op1_;
-    std::shared_ptr<const cppoqss::IOperator> op2_;
-
-    ar >> op1_;
-    ar >> op2_;
-
-    ::new(t)cppoqss::ProductOperator(op1_, op2_);
-}
-
-
-}} // namespace boost::serialization 
+#include <boost/serialization/export.hpp>
 
 
 BOOST_CLASS_EXPORT_KEY(cppoqss::special_operator::Zero)
