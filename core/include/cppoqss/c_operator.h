@@ -10,7 +10,6 @@
 
 #include <boost/container_hash/hash.hpp>
 #include <boost/mpi.hpp>
-#include <boost/serialization/base_object.hpp>
 #include <boost/unordered_map.hpp>
 
 #include <cppoqss/arithmetic.h>
@@ -44,12 +43,6 @@ public:
     bool is_gamma_nonzero(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType target_sindex) const final;
     CollapseGamma get_gamma_to_outer_state(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType outer_target_index, const double t) const final;
     bool is_gamma_to_outer_state_nonzero(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType outer_target_index) const final;
-
-private:
-    friend class boost::serialization::access;
-
-    template<class Archive>
-    void serialize(Archive& ar, const unsigned int version);
 };
 
 
@@ -88,14 +81,6 @@ bool IConstantCollapseImpl<SourceInfoType, TargetInfoType>::is_gamma_to_outer_st
 }
 
 
-template<class SourceInfoType, class TargetInfoType>
-template<class Archive>
-void IConstantCollapseImpl<SourceInfoType, TargetInfoType>::serialize(Archive& ar, const unsigned int version)
-{
-    ar & boost::serialization::base_object<ICOperator>(*this);
-}
-
-
 /**
  * The function hash_key() must be callable on SourceInfoType, ToRhoCacheKeyType, and ToPhiCacheKeyType.
  */
@@ -116,8 +101,6 @@ public:
     virtual CollapseGamma get_constant_gamma_to_outer_state(const SourceInfoType& source_info, const std::string& outer_target_name) const final;
 
 private:
-    friend class boost::serialization::access;
-
     struct ToPhiCacheTrueKeyType
     {
 	friend std::size_t hash_value(const ToPhiCacheTrueKeyType& v)
@@ -135,9 +118,6 @@ private:
 	ToPhiCacheKeyType source_key;
 	std::string target_key;
     };
-
-    template<class Archive>
-    void serialize(Archive& ar, const unsigned int version);
 
     boost::unordered_map<ToRhoCacheKeyType, CollapseGamma> to_rho_cache_;
     boost::unordered_map<ToPhiCacheTrueKeyType, CollapseGamma> to_phi_cache_;
@@ -238,34 +218,12 @@ bool CachedConstantCOperator<SourceInfoType, TargetInfoType, ToRhoCacheKeyType, 
 }
 
 
-template<class SourceInfoType, class TargetInfoType, class ToRhoCacheKeyType, class ToPhiCacheKeyType>
-template<class Archive>
-void CachedConstantCOperator<SourceInfoType, TargetInfoType, ToRhoCacheKeyType, ToPhiCacheKeyType>::serialize(Archive& ar, const unsigned int version)
-{
-    ar & boost::serialization::base_object<IConstantCollapseImpl<SourceInfoType, TargetInfoType>>(*this);
-}
-
-
 template<class SourceInfoType, class TargetInfoType>
 class RuntimeCalculatingConstantCOperator : public IConstantCollapseImpl<SourceInfoType, TargetInfoType>
 {
 public:
     void initialize(const StateSpace& state_space, const MyIndexType source_sindex_start, const MyIndexType source_sindex_end) override { }
-
-private:
-    friend class boost::serialization::access;
-
-    template<class Archive>
-    void serialize(Archive& ar, const unsigned int version);
 };
-
-
-template<class SourceInfoType, class TargetInfoType>
-template<class Archive>
-void RuntimeCalculatingConstantCOperator<SourceInfoType, TargetInfoType>::serialize(Archive& ar, const unsigned int version)
-{
-    ar & boost::serialization::base_object<IConstantCollapseImpl<SourceInfoType, TargetInfoType>>(*this);
-}
 
 
 } // namespace cppoqss

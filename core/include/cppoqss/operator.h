@@ -11,9 +11,10 @@
 #include <string>
 #include <unordered_map>
 
-#include <boost/archive/text_iarchive.hpp>
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/serialization/base_object.hpp>
+#include <cereal/access.hpp>
+#include <cereal/cereal.hpp>
+#include <cereal/types/memory.hpp>
+#include <cereal/types/polymorphic.hpp>
 
 #include <cppoqss/arithmetic.h>
 #include <cppoqss/state_space.h>
@@ -41,11 +42,6 @@ public:
     virtual bool is_each_element_nonzero(const StatePairInfoType& state_pair_info) const = 0;
 
 private:
-    friend class boost::serialization::access;
-
-    template<class Archive>
-    void serialize(Archive& ar, const unsigned int version);
-
     mutable MyElementType evaluated_shared_term_;
 };
 
@@ -56,13 +52,6 @@ void IOperatorImplWithSharedTerm<StatePairInfoType>::set_time(const double t) co
     evaluated_shared_term_ = this->get_shared_term(t);
 }
 
-template<class StatePairInfoType>
-template<class Archive>
-void IOperatorImplWithSharedTerm<StatePairInfoType>::serialize(Archive& ar, const unsigned int version)
-{
-    ar & boost::serialization::base_object<IOperator>(*this);
-}
-
 
 template<class StatePairInfoType>
 class RuntimeCalculatingOperatorWithSharedTerm : public IOperatorImplWithSharedTerm<StatePairInfoType>
@@ -70,12 +59,6 @@ class RuntimeCalculatingOperatorWithSharedTerm : public IOperatorImplWithSharedT
 public:
     MyElementType evaluate_element(const StateSpace& state_space, const MyIndexType bra_sindex, const MyIndexType ket_sindex, const double t) const override;
     bool is_element_nonzero(const StateSpace& state_space, const MyIndexType bra_sindex, const MyIndexType ket_sindex) const override;
-
-private:
-    friend class boost::serialization::access;
-
-    template<class Archive>
-    void serialize(Archive& ar, const unsigned int version);
 };
 
 
@@ -95,14 +78,6 @@ bool RuntimeCalculatingOperatorWithSharedTerm<StatePairInfoType>::is_element_non
 }
 
 
-template<class StatePairInfoType>
-template<class Archive>
-void RuntimeCalculatingOperatorWithSharedTerm<StatePairInfoType>::serialize(Archive& ar, const unsigned int version)
-{
-    ar & boost::serialization::base_object<IOperatorImplWithSharedTerm<StatePairInfoType>>(*this);
-}
-
-
 namespace special_operator
 {
 
@@ -115,15 +90,12 @@ public:
     bool is_element_nonzero(const StateSpace& state_space, const MyIndexType bra_sindex, const MyIndexType ket_sindex) const override { return false; }
 
 private:
-    friend class boost::serialization::access;
+    friend class cereal::access;
 
     template<class Archive>
-    void serialize(Archive& ar, const unsigned int version);
+    void serialize(Archive& ar, const std::uint32_t version)
+    { }
 };
-
-
-extern template void Zero::serialize(boost::archive::text_iarchive& ar, const unsigned int version);
-extern template void Zero::serialize(boost::archive::text_oarchive& ar, const unsigned int version);
 
 
 class One : public IOperator
@@ -134,25 +106,15 @@ public:
     bool is_element_nonzero(const StateSpace& state_space, const MyIndexType bra_sindex, const MyIndexType ket_sindex) const override { return true; }
 
 private:
-    friend class boost::serialization::access;
+    friend class cereal::access;
 
     template<class Archive>
-    void serialize(Archive& ar, const unsigned int version);
+    void serialize(Archive& ar, const std::uint32_t version)
+    { }
 };
 
 
-extern template void One::serialize(boost::archive::text_iarchive& ar, const unsigned int version);
-extern template void One::serialize(boost::archive::text_oarchive& ar, const unsigned int version);
-
-
 } // namespace special_operator
-
-
-class SumOperator;
-
-
-template<class Archive> void save_construct_data(Archive& ar, const SumOperator* t, const unsigned int version);
-template<class Archive> void load_construct_data(Archive& ar, SumOperator* t, const unsigned int version);
 
 
 class SumOperator : public IOperator 
@@ -165,31 +127,28 @@ public:
     bool is_element_nonzero(const StateSpace& state_space, const MyIndexType bra_sindex, const MyIndexType ket_sindex) const override;
 
 private:
-    friend class boost::serialization::access;
+    friend class cereal::access;
 
     template<class Archive>
-    friend void save_construct_data(Archive& ar, const SumOperator* t, const unsigned int version);
+    void serialize(Archive& ar, const std::uint32_t version)
+    {
+	ar(op1_, op2_);
+    }
 
     template<class Archive>
-    friend void load_construct_data(Archive& ar, cppoqss::SumOperator* t, const unsigned int version);
+    static void load_and_construct(Archive& ar, cereal::construct<SumOperator>& construct, const std::uint32_t version)
+    {
+	std::shared_ptr<const IOperator> op1_;
+	std::shared_ptr<const IOperator> op2_;
 
-    template<class Archive>
-    void serialize(Archive& ar, const unsigned int version) { }
+	ar(op1_, op2_);
+
+	construct(op1_, op2_);
+    }
 
     std::shared_ptr<const IOperator> op1_;
     std::shared_ptr<const IOperator> op2_;
 };
-
-
-extern template void save_construct_data(boost::archive::text_oarchive& ar, const SumOperator* t, const unsigned int version);
-extern template void load_construct_data(boost::archive::text_iarchive& ar, SumOperator* t, const unsigned int version);
-
-
-class ProductOperator;
-
-
-template<class Archive> void save_construct_data(Archive& ar, const ProductOperator* t, const unsigned int version);
-template<class Archive> void load_construct_data(Archive& ar, ProductOperator* t, const unsigned int version);
 
 
 class ProductOperator : public IOperator 
@@ -202,24 +161,28 @@ public:
     bool is_element_nonzero(const StateSpace& state_space, const MyIndexType bra_sindex, const MyIndexType ket_sindex) const override;
 
 private:
-    friend class boost::serialization::access;
+    friend class cereal::access;
 
     template<class Archive>
-    friend void save_construct_data(Archive& ar, const ProductOperator* t, const unsigned int version);
+    void serialize(Archive& ar, const std::uint32_t version)
+    {
+	ar(op1_, op2_);
+    }
 
     template<class Archive>
-    friend void load_construct_data(Archive& ar, cppoqss::ProductOperator* t, const unsigned int version);
+    static void load_and_construct(Archive& ar, cereal::construct<ProductOperator>& construct, const std::uint32_t version)
+    {
+	std::shared_ptr<const IOperator> op1_;
+	std::shared_ptr<const IOperator> op2_;
 
-    template<class Archive>
-    void serialize(Archive& ar, const unsigned int version) { }
+	ar(op1_, op2_);
+
+	construct(op1_, op2_);
+    }
 
     std::shared_ptr<const IOperator> op1_;
     std::shared_ptr<const IOperator> op2_;
 };
-
-
-extern template void save_construct_data(boost::archive::text_oarchive& ar, const ProductOperator* t, const unsigned int version);
-extern template void load_construct_data(boost::archive::text_iarchive& ar, ProductOperator* t, const unsigned int version);
 
 
 std::shared_ptr<IOperator> operator+(const std::shared_ptr<const IOperator>& op1, const std::shared_ptr<const IOperator>& op2);
@@ -231,13 +194,35 @@ std::shared_ptr<IOperator> operator*(const std::shared_ptr<const IOperator>& op1
 } // namespace cppoqss
 
 
-#include <boost/serialization/export.hpp>
+#include <cereal/archives/portable_binary.hpp>
+#include <cereal/archives/json.hpp>
 
 
-BOOST_CLASS_EXPORT_KEY(cppoqss::special_operator::Zero)
-BOOST_CLASS_EXPORT_KEY(cppoqss::special_operator::One)
-BOOST_CLASS_EXPORT_KEY(cppoqss::SumOperator)
-BOOST_CLASS_EXPORT_KEY(cppoqss::ProductOperator)
+CEREAL_CLASS_VERSION(cppoqss::special_operator::Zero, 1)
+
+CEREAL_CLASS_VERSION(cppoqss::special_operator::One, 1)
+
+CEREAL_CLASS_VERSION(cppoqss::SumOperator, 1)
+
+CEREAL_CLASS_VERSION(cppoqss::ProductOperator, 1)
+
+
+CEREAL_REGISTER_TYPE(cppoqss::special_operator::Zero)
+
+CEREAL_REGISTER_TYPE(cppoqss::special_operator::One)
+
+CEREAL_REGISTER_TYPE(cppoqss::SumOperator)
+
+CEREAL_REGISTER_TYPE(cppoqss::ProductOperator)
+
+
+CEREAL_REGISTER_POLYMORPHIC_RELATION(cppoqss::IOperator, cppoqss::special_operator::Zero)
+
+CEREAL_REGISTER_POLYMORPHIC_RELATION(cppoqss::IOperator, cppoqss::special_operator::One)
+
+CEREAL_REGISTER_POLYMORPHIC_RELATION(cppoqss::IOperator, cppoqss::SumOperator)
+
+CEREAL_REGISTER_POLYMORPHIC_RELATION(cppoqss::IOperator, cppoqss::ProductOperator)
 
 
 #endif

@@ -46,20 +46,10 @@ target_link_libraries(Arithmetic  PUBLIC
 )
 
 
-add_library(StateSpaceSerializer INTERFACE include/cppoqss/state_space_serializer_definition.h)
-target_include_directories(StateSpaceSerializer INTERFACE include)
-target_link_libraries(StateSpaceSerializer INTERFACE
-    Boost::serialization
-)
-
-
 add_library(StateSpace state_space.cc include/cppoqss/state_space.h)
 target_include_directories(StateSpace PUBLIC include)
-target_link_libraries(StateSpace INTERFACE
-    StateSpaceSerializer
-)
 target_link_libraries(StateSpace PUBLIC
-    Boost::serialization
+    cereal::cereal
 
     Arithmetic 
 )
@@ -85,7 +75,7 @@ target_link_libraries(DensityMatrix PRIVATE
 add_library(Operator operator.cc include/cppoqss/operator.h)
 target_include_directories(Operator PUBLIC include)
 target_link_libraries(Operator PUBLIC
-    Boost::serialization
+    cereal::cereal
 
     Arithmetic
     StateSpace
@@ -96,7 +86,6 @@ add_library(COperator INTERFACE include/cppoqss/c_operator.h)
 target_include_directories(COperator INTERFACE include)
 target_link_libraries(COperator INTERFACE
     Boost::boost
-    Boost::serialization
 
     Arithmetic
     MPIHelper
@@ -108,7 +97,6 @@ target_link_libraries(COperator INTERFACE
 add_library(Result result.cc include/cppoqss/result.h)
 target_include_directories(Result PUBLIC include)
 target_link_libraries(Result PUBLIC
-    Boost::serialization
 
     Arithmetic
     MPIHelper
@@ -140,9 +128,8 @@ target_link_libraries(OdeIntegratorFunction INTERFACE
 add_library(Solver INTERFACE include/cppoqss/solver.h)
 target_include_directories(Solver INTERFACE include)
 target_link_libraries(Solver INTERFACE
-    Boost::atomic
+    cereal::cereal
     Boost::boost
-    Boost::serialization
 
     COperator
     DensityMatrix
@@ -158,8 +145,7 @@ target_link_libraries(Solver INTERFACE
 add_library(ResultAnalyzer result_analyzer.cc include/cppoqss/result_analyzer.h)
 target_include_directories(ResultAnalyzer PUBLIC include)
 target_link_libraries(ResultAnalyzer PUBLIC
-    Boost::atomic
-    Boost::serialization
+    cereal::cereal
 
     Arithmetic
     OdeSystem

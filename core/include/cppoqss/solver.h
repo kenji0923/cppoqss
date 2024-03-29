@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -17,12 +18,13 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include <boost/archive/text_oarchive.hpp>
 #include <boost/format.hpp>
 #include <boost/numeric/odeint.hpp>
-#include <boost/serialization/access.hpp>
-#include <boost/serialization/vector.hpp>
-#include <boost/serialization/unordered_set.hpp>
+#include <cereal/access.hpp>
+#include <cereal/archives/json.hpp>
+#include <cereal/archives/portable_binary.hpp>
+#include <cereal/types/string.hpp>
+#include <cereal/types/vector.hpp>
 
 #include <cppoqss/c_operator.h>
 #include <cppoqss/density_matrix.h>
@@ -88,10 +90,13 @@ public:
 	auto back() const { return points_.back(); }
 
     private:
-	friend class boost::serialization::access;
+	friend class cereal::access;
 
 	template<class Archive>
-	void serialize(Archive& ar, const unsigned int version);
+	void serialize(Archive& ar)
+	{
+	    ar(points_, save_mode_);
+	}
 
 	std::vector<double> points_; /**< Must be sorted. */
 	std::vector<int> save_mode_; /**< If mode is negative, saving process is ignored. The mode 0 is for saving full data. */
@@ -176,15 +181,6 @@ void Solver<StateType, SystemType>::ObservationPointList::set_start_point(const 
 
 
 template<class StateType, class SystemType>
-template<class Archive>
-void Solver<StateType, SystemType>::ObservationPointList::serialize(Archive& ar, const unsigned int version)
-{
-    ar & points_;
-    ar & save_mode_;
-}
-
-
-template<class StateType, class SystemType>
 Solver<StateType, SystemType>::Observer::Observer(SystemType& ode_system, const ObservationPointList& obs_points, const std::filesystem::path& dir_result_saved, const unsigned int force_saving_interval)
 :   ode_system_(ode_system),
     obs_points_(obs_points),
@@ -247,9 +243,9 @@ void Solver<StateType, SystemType>::Observer::operator()(const typename SystemTy
 	const std::filesystem::path& tmp_directory = dir_result_saved_ / "tmp/";
 
 	if (mpi_helper::is_manager_rank()) {
-	    std::ofstream ofs((tmp_directory / "time_point.dat").c_str());
-	    boost::archive::text_oarchive oa(ofs);
-	    oa << t;
+	    std::ofstream ofs((tmp_directory / "time_point.dat").c_str(), std::ios::binary);
+	    cereal::PortableBinaryOutputArchive oa(ofs);
+	    oa(t);
 	}
 
 	for (auto& result : results_) {
@@ -332,16 +328,15 @@ Solver<StateType, SystemType>::Solver(StateType& state, const std::string& resul
 	std::cout << "results will be saved in " << save_dir_.relative_path().c_str() << std::endl;
 
 	{
-	    std::ofstream ofs((save_dir_ / "state_space.dat").c_str());
-	    boost::archive::text_oarchive oa(ofs);
-	    oa << state.ptr_state_space_;
+	    std::ofstream ofs((save_dir_ / "state_space.dat").c_str(), std::ios::binary);
+	    cereal::PortableBinaryOutputArchive oa(ofs);
+	    oa(state.ptr_state_space_);
 	}
 
 	{
-	    std::ofstream ofs((save_dir_ / "solver.dat").c_str());
-	    boost::archive::text_oarchive oa(ofs);
-	    oa << state.type;
-	    oa << ode_system_.type;
+	    std::ofstream ofs((save_dir_ / "solver.dat").c_str(), std::ios::binary);
+	    cereal::PortableBinaryOutputArchive oa(ofs);
+	    oa(state.type, ode_system_.type);
 	}
     }
 
@@ -439,9 +434,9 @@ size_t Solver<StateType, SystemType>::solve(ObservationPointList& obs_points, St
 	}
 
 	{
-	    std::ofstream ofs(dir_result_saved / "observation_points.dat");
-	    boost::archive::text_oarchive oa(ofs);
-	    oa << obs_points;
+	    std::ofstream ofs(dir_result_saved / "observation_points.dat", std::ios::binary);
+	    cereal::PortableBinaryOutputArchive oa(ofs);
+	    oa(obs_points);
 	}
     }
 

@@ -6,8 +6,9 @@
 #include <iostream>
 #include <iterator>
 
-#include <boost/archive/text_iarchive.hpp>
-#include <boost/serialization/string.hpp>
+#include <cereal/archives/portable_binary.hpp>
+#include <cereal/archives/json.hpp>
+#include <cereal/types/memory.hpp>
 
 #include <cppoqss/arithmetic.h>
 #include <cppoqss/state_system_name.h>
@@ -21,20 +22,19 @@ ResultAnalyzer::ResultAnalyzer(const std::filesystem::path& read_path, const std
 : solved_path_(read_path / solved_dir)
 {
     {
-	std::ifstream ifs((read_path / "state_space.dat").c_str());
+	std::ifstream ifs((read_path / "state_space.dat").c_str(), std::ios::binary);
 
-	boost::archive::text_iarchive ia(ifs);
+	cereal::PortableBinaryInputArchive ia(ifs);
 
-	ia >> state_space_;
+	ia(state_space_);
     }
 
     {
-	std::ifstream ifs((read_path / "solver.dat").c_str());
+	std::ifstream ifs((read_path / "solver.dat").c_str(), std::ios::binary);
 
-	boost::archive::text_iarchive ia(ifs);
+	cereal::PortableBinaryInputArchive ia(ifs);
 
-	ia >> state_type_;
-	ia >> ode_system_type_;
+	ia(state_type_, ode_system_type_);
     }
 
     if (ode_system_type_ == CPPOQSS_MACRO_SYSTEM_NAME_ODELINDBLAD) {
@@ -49,8 +49,8 @@ ResultAnalyzer::ResultAnalyzer(const std::filesystem::path& read_path, const std
     }
 
     printf("state space:\n");
-    printf("  n_dim_rho: %zu\n", state_space_->get_n_dim_rho());
-    printf("  n_dim_phi: %zu\n", state_space_->get_n_dim_phi());
+    printf("  n_dim_rho: %lld\n", state_space_->get_n_dim_rho());
+    printf("  n_dim_phi: %lld\n", state_space_->get_n_dim_phi());
 
     std::cout << "results: " << std::flush;
     for (const auto& name : result_names_) {

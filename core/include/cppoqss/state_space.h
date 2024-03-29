@@ -2,7 +2,9 @@
 #define STATE_SPACE_H
 
 
+#include "cereal/cereal.hpp"
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -10,13 +12,9 @@
 #include <unordered_set>
 #include <vector>
 
-#include <boost/archive/text_iarchive.hpp>
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/serialization/access.hpp>
-#include <boost/serialization/base_object.hpp>
-#include <boost/serialization/shared_ptr.hpp>
-#include <boost/serialization/unique_ptr.hpp>
-#include <boost/serialization/vector.hpp>
+#include <cereal/access.hpp>
+#include <cereal/types/memory.hpp>
+#include <cereal/types/vector.hpp>
 
 #include <cppoqss/arithmetic.h>
 
@@ -31,22 +29,7 @@ public:
 
     virtual std::string get_space_name() const = 0;
     virtual MyIndexType get_n_dim() const = 0;
-
-private:
-    friend class boost::serialization::access;
-
-    template<class Archive>
-    void serialize(Archive& ar, const unsigned int version) { }
 };
-
-
-template<class EigenValueType> class SingleStateSpace;
-
-
-template<class Archive, class EigenValueType> void save_construct_data(Archive& ar, const SingleStateSpace<EigenValueType>* t, const unsigned int version);
-
-
-template<class Archive, class EigenValueType> void load_construct_data(Archive& ar, SingleStateSpace<EigenValueType>* t, const unsigned int version);
 
 
 template<class EigenValueType>
@@ -65,16 +48,24 @@ public:
     void loop_over_states(std::function<void(const MyIndexType, const EigenValueType&)> process) const;
 
 private:
-    friend class boost::serialization::access;
-
-    template<class Archive, class EigenValue2Type>
-    friend void save_construct_data(Archive& ar, const SingleStateSpace<EigenValue2Type>* t, const unsigned int version);
-
-    template<class Archive, class EigenValue2Type>
-    friend void load_construct_data(Archive& ar, SingleStateSpace<EigenValue2Type>* t, const unsigned int version);
+    friend class cereal::access;
 
     template<class Archive>
-    void serialize(Archive& ar, const unsigned int version) { }
+    void serialize(Archive& ar)
+    {
+	ar(space_name_, eigen_values_);
+    }
+
+    template<class Archive>
+    static void load_and_construct(Archive& ar, cereal::construct<SingleStateSpace<EigenValueType>>& construct)
+    {
+	std::string space_name_;
+	std::vector<std::unique_ptr<EigenValueType>> eigen_values_;
+
+	ar(space_name_, eigen_values_);
+
+	construct(space_name_, std::move(eigen_values_));
+    }
 
     std::string space_name_;
     std::vector<std::unique_ptr<EigenValueType>> eigen_values_;
@@ -98,17 +89,6 @@ void SingleStateSpace<EigenValueType>::loop_over_states(std::function<void(const
 }
 
 
-// template<class EigenValueType>
-// template<class Archive>
-// void SingleStateSpace<EigenValueType>::serialize(Archive& ar, const unsigned int version)
-// {
-//     ar & boost::serialization::base_object<ISingleStateSpace>(*this);
-//     ar & space_name_;
-//     ar & eigen_values_;
-//     ar & n_dim_;
-// }
-
-
 class StateSpace;
 
 
@@ -120,12 +100,6 @@ public:
     virtual void set_time(const double t) const = 0;
     virtual MyElementType evaluate_element(const StateSpace& state_space, const MyIndexType i, const MyIndexType j, const double t) const = 0;
     virtual bool is_element_nonzero(const StateSpace& state_space, const MyIndexType i, const MyIndexType j) const = 0;
-
-private:
-    friend class boost::serialization::access;
-
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version) { }
 };
 
 
@@ -160,12 +134,6 @@ public:
     virtual std::unordered_set<std::string> get_outer_state_names(const StateSpace& state_space) const = 0;
     virtual CollapseGamma get_gamma_to_outer_state(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType outer_target_index, const double t) const = 0;
     virtual bool is_gamma_to_outer_state_nonzero(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType outer_target_index) const = 0;
-
-private:
-    friend class boost::serialization::access;
-
-    template<class Archive>
-    void serialize(Archive & ar, const unsigned int version) { }
 };
 
 
@@ -203,12 +171,6 @@ private:
 };
 
 
-template<class Archive> void save_construct_data(Archive& ar, const StateSpace* t, const unsigned version);
-
-
-template<class Archive> void load_construct_data(Archive& ar, StateSpace* t, const unsigned version);
-
-
 class StateSpace
 {
 public:
@@ -243,16 +205,26 @@ public:
     const IOperator& get_hamiltonian() const { return *hamiltonian_; }
 
 private:
-    friend class boost::serialization::access;
+    friend class cereal::access;
 
     template<class Archive>
-    friend void save_construct_data(Archive& ar, const StateSpace* t, const unsigned int version);
+    void serialize(Archive& ar, const std::uint32_t version)
+    {
+	ar(state_spaces_, c_operators_, hamiltonian_, index_getter_type_);
+    }
 
     template<class Archive>
-    friend void load_construct_data(Archive& ar, StateSpace* t, const unsigned int version);
+    static void load_and_construct(Archive& ar, cereal::construct<StateSpace>& construct, const std::uint32_t version)
+    {
+	std::vector<std::unique_ptr<const ISingleStateSpace>> state_spaces_;
+	std::vector<std::unique_ptr<const ICOperator>> c_operators_;
+	std::shared_ptr<IOperator> hamiltonian_;
+	IndexGetterType index_getter_type_;
 
-    template<class Archive>
-    void serialize(Archive& ar, const unsigned int version) { }
+	ar(state_spaces_, c_operators_, hamiltonian_, index_getter_type_);
+
+	construct(std::move(state_spaces_), std::move(c_operators_), hamiltonian_, index_getter_type_);
+    }
 
     void initialize();
 
@@ -286,23 +258,10 @@ template<class EigenValueType> const EigenValueType& StateSpace::get_eigen_value
 }
 
 
-extern template void save_construct_data(boost::archive::text_oarchive& ar, const StateSpace* t, const unsigned int version);
-
-extern template void load_construct_data(boost::archive::text_iarchive& ar, StateSpace* t, const unsigned int version);
-
-
 } // namespace cppoqss
 
 
-#include <boost/serialization/assume_abstract.hpp>
-#include <boost/serialization/export.hpp>
-
-
-BOOST_SERIALIZATION_ASSUME_ABSTRACT(cppoqss::ISingleStateSpace)
-BOOST_SERIALIZATION_ASSUME_ABSTRACT(cppoqss::IOperator)
-BOOST_SERIALIZATION_ASSUME_ABSTRACT(cppoqss::ICOperator)
-
-BOOST_CLASS_EXPORT_KEY(cppoqss::IOperator)
+CEREAL_CLASS_VERSION(cppoqss::StateSpace, 1);
 
 
 #endif
