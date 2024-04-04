@@ -38,7 +38,7 @@ class SingleStateSpace : public ISingleStateSpace
 public:
     SingleStateSpace(const std::string& space_name);
 
-    virtual const EigenValueType& get_eigen_value(const MyIndexType index) const = 0;
+    virtual std::shared_ptr<const EigenValueType> get_eigen_value(const MyIndexType index) const = 0;
 
     template<class OperatorType>
     void loop_over_states(const OperatorType& op) const;
@@ -73,7 +73,7 @@ public:
     template<class EigenValuesType>
     SingleStateSpaceCached(const std::string& space_name, EigenValuesType&& eigen_values);
 
-    const EigenValueType& get_eigen_value(const MyIndexType index) const override { return *eigen_values_.at(index); }
+    std::shared_ptr<const EigenValueType> get_eigen_value(const MyIndexType index) const override { return eigen_values_.at(index); }
 
     MyIndexType get_n_dim() const override { return n_dim_; }
 
@@ -90,14 +90,14 @@ private:
     static void load_and_construct(Archive& ar, cereal::construct<SingleStateSpaceCached<EigenValueType>>& construct)
     {
 	std::string space_name_;
-	std::vector<std::unique_ptr<EigenValueType>> eigen_values_;
+	std::vector<std::shared_ptr<EigenValueType>> eigen_values_;
 
 	ar(space_name_, eigen_values_);
 
 	construct(space_name_, std::move(eigen_values_));
     }
 
-    std::vector<std::unique_ptr<EigenValueType>> eigen_values_;
+    std::vector<std::shared_ptr<EigenValueType>> eigen_values_;
     MyIndexType n_dim_;
 };
 
@@ -213,10 +213,10 @@ public:
     const SingleStateSpace<EigenValueType>& get_single_state_space(const std::string& space_name) const { return static_cast<const SingleStateSpace<EigenValueType>&>(map_name_to_space_.at(space_name).get()); }
 
     template<class EigenValueType>
-    const EigenValueType& get_eigen_value(const MyIndexType sindex, const std::string& space_name) const;
+    std::shared_ptr<const EigenValueType> get_eigen_value(const MyIndexType sindex, const std::string& space_name) const;
 
     template<class EigenValueType>
-    const EigenValueType& get_eigen_value_from_space(const MyIndexType index, const std::string& space_name) const;
+    std::shared_ptr<const EigenValueType> get_eigen_value_from_space(const MyIndexType index, const std::string& space_name) const;
 
     const std::string& get_outer_state_name(const MyIndexType index) const;
 
@@ -269,12 +269,13 @@ private:
 
 
 template<class EigenValueType>
-const EigenValueType& StateSpace::get_eigen_value(const MyIndexType sindex, const std::string& space_name) const
+std::shared_ptr<const EigenValueType> StateSpace::get_eigen_value(const MyIndexType sindex, const std::string& space_name) const
 {
     return get_eigen_value_from_space<EigenValueType>(index_getter_->get_single_space_index(sindex, space_name), space_name);
 }
 
-template<class EigenValueType> const EigenValueType& StateSpace::get_eigen_value_from_space(const MyIndexType eigen_value_index, const std::string& space_name) const
+template<class EigenValueType>
+std::shared_ptr<const EigenValueType> StateSpace::get_eigen_value_from_space(const MyIndexType eigen_value_index, const std::string& space_name) const
 {
     return get_single_state_space<EigenValueType>(space_name).get_eigen_value(eigen_value_index);
 }
