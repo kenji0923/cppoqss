@@ -142,7 +142,7 @@ void StateSpace::initialize()
     }
 
     for (const auto& state_space : state_spaces_) {
-	map_name_to_space_.emplace(state_space->get_space_name(), *state_space);
+	map_name_to_space_.emplace(state_space->get_space_name(), *state_space.get());
     }
 
     for (const auto& c_op : c_operators_) {

@@ -2,7 +2,6 @@
 #define STATE_SPACE_H
 
 
-#include "cereal/cereal.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -13,6 +12,7 @@
 #include <vector>
 
 #include <cereal/access.hpp>
+#include <cereal/cereal.hpp>
 #include <cereal/types/memory.hpp>
 #include <cereal/types/vector.hpp>
 
@@ -36,16 +36,46 @@ template<class EigenValueType>
 class SingleStateSpace : public ISingleStateSpace
 {
 public:
-    template<class EigenValuesType>
-    SingleStateSpace(const std::string& space_name, EigenValuesType eigen_values);
+    SingleStateSpace(const std::string& space_name);
 
-    const EigenValueType& get_eigen_value(const MyIndexType index) const { return *eigen_values_.at(index); }
-    std::string get_unique_eigen_state_label(const MyIndexType index) const { return eigen_values_[index]->get_unique_label(); }
+    virtual const EigenValueType& get_eigen_value(const MyIndexType index) const = 0;
+
+    template<class OperatorType>
+    void loop_over_states(const OperatorType& op) const;
 
     std::string get_space_name() const override { return space_name_; }
-    MyIndexType get_n_dim() const override { return n_dim_; }
 
-    void loop_over_states(std::function<void(const MyIndexType, const EigenValueType&)> process) const;
+private:
+    std::string space_name_;
+};
+
+
+template<class EigenValueType>
+template<class OperatorType>
+void SingleStateSpace<EigenValueType>::loop_over_states(const OperatorType& op) const
+{
+    for (MyIndexType i = 0; i < this->get_n_dim(); ++i) {
+	op(i, get_eigen_value(i));
+    }
+}
+
+
+template<class EigenValueType>
+SingleStateSpace<EigenValueType>::SingleStateSpace(const std::string& space_name)
+:   space_name_(space_name)
+{ }
+
+
+template<class EigenValueType>
+class SingleStateSpaceCached : public SingleStateSpace<EigenValueType>
+{
+public:
+    template<class EigenValuesType>
+    SingleStateSpaceCached(const std::string& space_name, EigenValuesType&& eigen_values);
+
+    const EigenValueType& get_eigen_value(const MyIndexType index) const override { return *eigen_values_.at(index); }
+
+    MyIndexType get_n_dim() const override { return n_dim_; }
 
 private:
     friend class cereal::access;
@@ -53,11 +83,11 @@ private:
     template<class Archive>
     void serialize(Archive& ar)
     {
-	ar(space_name_, eigen_values_);
+	ar(this->get_space_name(), eigen_values_);
     }
 
     template<class Archive>
-    static void load_and_construct(Archive& ar, cereal::construct<SingleStateSpace<EigenValueType>>& construct)
+    static void load_and_construct(Archive& ar, cereal::construct<SingleStateSpaceCached<EigenValueType>>& construct)
     {
 	std::string space_name_;
 	std::vector<std::unique_ptr<EigenValueType>> eigen_values_;
@@ -67,7 +97,6 @@ private:
 	construct(space_name_, std::move(eigen_values_));
     }
 
-    std::string space_name_;
     std::vector<std::unique_ptr<EigenValueType>> eigen_values_;
     MyIndexType n_dim_;
 };
@@ -75,18 +104,11 @@ private:
 
 template<class EigenValueType>
 template<class EigenValuesType>
-SingleStateSpace<EigenValueType>::SingleStateSpace(const std::string& space_name, EigenValuesType eigen_values)
-    : space_name_(space_name), eigen_values_(std::forward<EigenValuesType>(eigen_values)), n_dim_(eigen_values_.size()) 
+SingleStateSpaceCached<EigenValueType>::SingleStateSpaceCached(const std::string& space_name, EigenValuesType&& eigen_values)
+:   SingleStateSpace<EigenValueType>(space_name),
+    eigen_values_(std::forward<EigenValuesType>(eigen_values)),
+    n_dim_(eigen_values_.size()) 
 { }
-
-
-template<class EigenValueType>
-void SingleStateSpace<EigenValueType>::loop_over_states(std::function<void(const MyIndexType, const EigenValueType&)> process) const
-{
-    for (MyIndexType i = 0; i < n_dim_; ++i) {
-	process(i, *eigen_values_[i]);
-    }
-}
 
 
 class StateSpace;
