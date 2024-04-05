@@ -130,10 +130,8 @@ private:
 	const std::reference_wrapper<const ICOperator> c_operator;
 	std::unordered_set<MyIndexType> state_with_nonzero_constant_collapse;
 	std::unordered_set<MyIndexType> state_with_nonzero_variable_collapse;
-	std::unordered_map<MyIndexType, std::unordered_map<size_t, std::unordered_set<MyIndexType>>> nonzero_collapse_pairs;		    /**< keys: i, rank */
-	std::unordered_map<MyIndexType, std::unordered_map<size_t, std::unordered_set<MyIndexType>>> nonzero_collapse_pairs_to_outer_state; /**< keys: i, rank */
-
-	// std::unordered_map<MyIndexType, std::unordered_map<MyIndexType, double>> cached_gamma;
+	std::unordered_map<MyIndexType, std::unordered_set<MyIndexType>> nonzero_collapse_pairs;
+	std::unordered_map<MyIndexType, std::unordered_set<MyIndexType>> nonzero_collapse_pairs_to_outer_state;
     };
 
     void evaluate_hamiltonian(const double t) const;
@@ -157,10 +155,12 @@ private:
     MyIndexType rho_n_dim_;
     MyIndexType rho_n_ownership_row_;
     std::array<MyIndexType, 2> rho_ownership_range_row_;
+    std::vector<std::array<MyIndexType, 2>> rho_ownership_range_row_of_each_rank_;
 
     MyIndexType phi_n_dim_;
     MyIndexType phi_n_ownership_;
     std::array<MyIndexType, 2> phi_ownership_range_;
+    std::vector<std::array<MyIndexType, 2>> phi_ownership_range_of_each_rank_;
 };
 
 

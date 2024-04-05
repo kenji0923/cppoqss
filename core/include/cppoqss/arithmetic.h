@@ -30,9 +30,15 @@ typedef PetscScalar MyElementType;
 
 struct MyRowCopied
 {
-  MyIndexType n_col;
-  std::vector<MyIndexType> cols;
-  std::vector<MyElementType> values;
+    MyIndexType n_col;
+    std::vector<MyIndexType> cols;
+    std::vector<MyElementType> values;
+
+    template<class Archive>
+    void serialize(Archive& ar, const unsigned int version)
+    {
+	ar & n_col & cols & values;
+    }
 };
 
 struct MyRow
@@ -157,6 +163,7 @@ public:
     MyMat duplicate() const;
 
     MyVec get_diagonal() const;
+    MyVec get_diagonal_to_local_vector() const;
 
     MyIndexType get_n_dim() const { return ownership_info_.n_dim; }
     MyIndexType get_n_ownership_row() const { return ownership_info_.n_row; }
@@ -207,6 +214,9 @@ public:
 
     void begin_final_assembly() { MatAssemblyBegin(mat_, MAT_FINAL_ASSEMBLY); }
     void end_final_assembly() { MatAssemblyEnd(mat_, MAT_FINAL_ASSEMBLY); }
+
+    void begin_flush_assembly() { MatAssemblyBegin(mat_, MAT_FLUSH_ASSEMBLY); }
+    void end_flush_assembly() { MatAssemblyEnd(mat_, MAT_FLUSH_ASSEMBLY); }
 
     void write_to_file(const std::filesystem::path& path) const;
     off_t append_to_file(const std::filesystem::path& path) const;

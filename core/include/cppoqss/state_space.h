@@ -144,7 +144,7 @@ class ICOperator
 public:
     virtual ~ICOperator() {}
 
-    virtual void initialize(const StateSpace& state_space, const MyIndexType source_sindex_start, const MyIndexType source_sindex_end) = 0;
+    virtual void initialize(const StateSpace& state_space, const MyIndexType source_sindex_start, const MyIndexType source_sindex_end, const MyIndexType target_sindex_start, const MyIndexType target_sindex_end, const MyIndexType outer_target_index_start, const MyIndexType outer_target_index_end) = 0;
 
     virtual bool is_constant() const = 0;
 

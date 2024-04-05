@@ -425,16 +425,57 @@ MyMat MyMat::duplicate() const
 
 MyVec MyMat::get_diagonal() const
 {
-  Vec vec;
-  VecCreate(PETSC_COMM_WORLD, &vec);
-  VecSetSizes(vec, PETSC_DECIDE, get_n_dim());
-  VecSetFromOptions(vec);
+    Vec vec;
+    VecCreate(PETSC_COMM_WORLD, &vec);
+    VecSetSizes(vec, PETSC_DECIDE, get_n_dim());
+    VecSetFromOptions(vec);
 
-  MatGetDiagonal(mat_, vec);
+    MatGetDiagonal(mat_, vec);
 
-  MyVec my_vec(vec);
+    MyVec my_vec(vec);
 
-  return my_vec;
+    return my_vec;
+}
+
+
+MyVec MyMat::get_diagonal_to_local_vector() const
+{
+    Vec vec;
+    VecCreate(PETSC_COMM_WORLD, &vec);
+    VecSetSizes(vec, PETSC_DECIDE, get_n_dim());
+    VecSetFromOptions(vec);
+
+    MatGetDiagonal(mat_, vec);
+
+    Vec v = vec;
+
+    IS is;
+    ISCreateStride(PETSC_COMM_WORLD, get_n_dim(), 0, 1, &is);
+
+    Vec v_gathered;
+    VecCreate(PETSC_COMM_SELF, &v_gathered);
+    VecSetSizes(v_gathered, PETSC_DECIDE, get_n_dim());
+
+    PetscBool is_kokkos_type_is_matched;
+    PetscObjectBaseTypeCompareAny((PetscObject)v, &is_kokkos_type_is_matched, VECMPIKOKKOS, VECSEQKOKKOS, VECKOKKOS, "");
+    if (is_kokkos_type_is_matched) {
+	VecSetType(v_gathered, VECSEQKOKKOS);
+    }
+    if (!is_kokkos_type_is_matched) {
+	VecSetType(v_gathered, VECSEQ);
+    }
+
+    VecScatter ctx;
+    VecScatterCreate(v, is, v_gathered, is, &ctx);
+    VecScatterBegin(ctx, v, v_gathered, INSERT_VALUES, SCATTER_FORWARD);
+    VecScatterEnd(ctx, v, v_gathered, INSERT_VALUES, SCATTER_FORWARD);
+    VecScatterDestroy(&ctx);
+
+    ISDestroy(&is);
+
+    MyVec my_vec(v_gathered);
+
+    return my_vec;
 }
 
 

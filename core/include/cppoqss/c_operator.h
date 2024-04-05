@@ -88,13 +88,14 @@ template<class SourceInfoType, class TargetInfoType, class ToRhoCacheKeyType, cl
 class CachedConstantCOperator : public IConstantCollapseImpl<SourceInfoType, TargetInfoType>
 {
 public:
+    virtual ~CachedConstantCOperator() = default;
+
     virtual ToRhoCacheKeyType get_to_rho_cache_key(const SourceInfoType& source_info, const TargetInfoType& target_info) const = 0;
     virtual ToPhiCacheKeyType get_to_phi_cache_key(const SourceInfoType& source_info) const = 0;
     virtual CollapseGamma calculate_constant_gamma(const SourceInfoType& source_info, const TargetInfoType& target_info) const = 0;
     virtual CollapseGamma calculate_constant_gamma_to_outer_state(const SourceInfoType& source_info, const std::string& outer_target_name) const = 0;
 
-
-    void initialize(const StateSpace& state_space, const MyIndexType source_sindex_start, const MyIndexType source_sindex_end) final;
+    void initialize(const StateSpace& state_space, const MyIndexType source_sindex_start, const MyIndexType source_sindex_end, const MyIndexType target_sindex_start, const MyIndexType target_sindex_end, const MyIndexType outer_target_index_start, const MyIndexType outer_target_index_end) final;
 
     double get_constant_gamma_sum(const SourceInfoType& source_info) const final;
     CollapseGamma get_constant_gamma(const SourceInfoType& source_info, const TargetInfoType& target_info) const final;
@@ -126,12 +127,12 @@ private:
 
 
 template<class SourceInfoType, class TargetInfoType, class ToRhoCacheKeyType, class ToPhiCacheKeyType>
-void CachedConstantCOperator<SourceInfoType, TargetInfoType, ToRhoCacheKeyType, ToPhiCacheKeyType>::initialize(const StateSpace& state_space, const MyIndexType source_sindex_start, const MyIndexType source_sindex_end)
+void CachedConstantCOperator<SourceInfoType, TargetInfoType, ToRhoCacheKeyType, ToPhiCacheKeyType>::initialize(const StateSpace& state_space, const MyIndexType source_sindex_start, const MyIndexType source_sindex_end, const MyIndexType target_sindex_start, const MyIndexType target_sindex_end, const MyIndexType outer_target_index_start, const MyIndexType outer_target_index_end)
 {
     const MyIndexType n_rho_target = state_space.get_n_dim_rho();
 
     const MyIndexType n_phi_target = state_space.get_n_dim_phi();
-    
+
     ProgressBar::InitBar("cache c-operator", source_sindex_end - source_sindex_start);
 
     for (MyIndexType source_sindex = source_sindex_start; source_sindex < source_sindex_end; ++source_sindex) {
@@ -145,12 +146,15 @@ void CachedConstantCOperator<SourceInfoType, TargetInfoType, ToRhoCacheKeyType, 
 	    CollapseGamma gamma = calculate_constant_gamma(source_info, target_info);
 
 	    if (gamma.gamma != 0.0) {
-		to_rho_cache_.emplace(get_to_rho_cache_key(source_info, target_info), gamma);
+	       	if (target_sindex_start <= target_sindex && target_sindex < target_sindex_end) {
+		    to_rho_cache_.emplace(get_to_rho_cache_key(source_info, target_info), gamma);
+		}
+
 		sum += gamma.get_collapse_gamma();
 	    }
 	}
 
-	for (MyIndexType outer_target_index = 0; outer_target_index < n_phi_target; ++outer_target_index) {
+	for (MyIndexType outer_target_index = outer_target_index_start; outer_target_index < outer_target_index_end; ++outer_target_index) {
 	    const std::string outer_target_name = state_space.get_outer_state_name(outer_target_index);
 
 	    ToPhiCacheTrueKeyType key { get_to_phi_cache_key(source_info), outer_target_name };
@@ -158,7 +162,10 @@ void CachedConstantCOperator<SourceInfoType, TargetInfoType, ToRhoCacheKeyType, 
 	    CollapseGamma gamma = calculate_constant_gamma_to_outer_state(source_info, outer_target_name); 
 
 	    if (gamma.gamma != 0.0) {
-		to_phi_cache_.emplace(key, gamma);
+		if (outer_target_index_start <= outer_target_index && outer_target_index < outer_target_index_end) {
+		    to_phi_cache_.emplace(key, gamma);
+		}
+
 		sum += gamma.get_collapse_gamma();
 	    }
 	}
@@ -219,10 +226,171 @@ bool CachedConstantCOperator<SourceInfoType, TargetInfoType, ToRhoCacheKeyType, 
 
 
 template<class SourceInfoType, class TargetInfoType>
+class CachedConstantCOperatorWithIndexAsKey : public ICOperator
+{
+public:
+    virtual ~CachedConstantCOperatorWithIndexAsKey() = default;
+
+    virtual SourceInfoType get_source_info(const StateSpace& state_space, const MyIndexType sindex) const = 0;
+    virtual TargetInfoType get_target_info(const StateSpace& state_space, const MyIndexType sindex) const = 0;
+
+    virtual CollapseGamma calculate_constant_gamma(const SourceInfoType& source_info, const TargetInfoType& target_info) const = 0;
+    virtual CollapseGamma calculate_constant_gamma_to_outer_state(const SourceInfoType& source_info, const std::string& outer_target_name) const = 0;
+
+    void initialize(const StateSpace& state_space, const MyIndexType source_sindex_start, const MyIndexType source_sindex_end, const MyIndexType target_sindex_start, const MyIndexType target_sindex_end, const MyIndexType outer_target_index_start, const MyIndexType outer_target_index_end) final;
+
+    bool is_constant() const final { return true; }
+
+    double get_gamma_sum(const StateSpace& state_space, const MyIndexType source_sindex, const double t) const final;
+
+    CollapseGamma get_gamma(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType target_sindex, const double t) const final;
+    bool is_gamma_nonzero(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType target_sindex) const final;
+
+    CollapseGamma get_gamma_to_outer_state(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType outer_target_index, const double t) const final;
+    bool is_gamma_to_outer_state_nonzero(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType outer_target_index) const final;
+
+private:
+    std::unordered_map<MyIndexType, std::unordered_map<MyIndexType, CollapseGamma>> to_rho_cache_;
+    std::unordered_map<MyIndexType, std::unordered_map<MyIndexType, CollapseGamma>> to_phi_cache_;
+    std::unordered_map<MyIndexType, double> sum_cache_;
+};
+
+
+template<class SourceInfoType, class TargetInfoType>
+void CachedConstantCOperatorWithIndexAsKey<SourceInfoType, TargetInfoType>::initialize(const StateSpace& state_space, const MyIndexType source_sindex_start, const MyIndexType source_sindex_end, const MyIndexType target_sindex_start, const MyIndexType target_sindex_end, const MyIndexType outer_target_index_start, const MyIndexType outer_target_index_end)
+{
+    const MyIndexType n_rho_target = state_space.get_n_dim_rho();
+
+    const MyIndexType n_phi_target = state_space.get_n_dim_phi();
+
+    ProgressBar::InitBar("cache c-operator with index as key", source_sindex_end - source_sindex_start);
+
+    for (MyIndexType source_sindex = source_sindex_start; source_sindex < source_sindex_end; ++source_sindex) {
+	const SourceInfoType source_info = this->get_source_info(state_space, source_sindex);
+
+	double sum = 0.0;
+
+	for (MyIndexType target_sindex = 0; target_sindex < n_rho_target; ++target_sindex) {
+	    const TargetInfoType target_info = this->get_target_info(state_space, target_sindex);
+
+	    CollapseGamma gamma = calculate_constant_gamma(source_info, target_info);
+
+	    if (gamma.gamma != 0.0) {
+	       	if (target_sindex_start <= target_sindex && target_sindex < target_sindex_end) {
+		    to_rho_cache_[source_sindex].emplace(target_sindex, gamma);
+		}
+
+		sum += gamma.get_collapse_gamma();
+	    }
+	}
+
+	for (MyIndexType outer_target_index = 0; outer_target_index < n_phi_target; ++outer_target_index) {
+	    const std::string outer_target_name = state_space.get_outer_state_name(outer_target_index);
+
+	    CollapseGamma gamma = calculate_constant_gamma_to_outer_state(source_info, outer_target_name); 
+
+	    if (gamma.gamma != 0.0) {
+		if (outer_target_index_start <= outer_target_index && outer_target_index < outer_target_index_end) {
+		    to_phi_cache_[source_sindex].emplace(outer_target_index, gamma);
+		}
+
+		sum += gamma.get_collapse_gamma();
+	    }
+	}
+
+	if (sum != 0.0) sum_cache_[source_sindex] = sum;
+
+	ProgressBar::ProgressStep();
+    }
+
+    size_t n_collapse_mode = 0;
+
+    for (const auto& [i, j_to_gamma] : to_rho_cache_) {
+	n_collapse_mode += j_to_gamma.size();
+    }
+
+    for (const auto& [i, j_to_gamma] : to_phi_cache_) {
+	n_collapse_mode += j_to_gamma.size();
+    }
+
+    const size_t n_collapse_mode_sum = boost::mpi::all_reduce(mpi_helper::world, n_collapse_mode, std::plus<size_t>());
+
+    if (mpi_helper::is_printing_rank()) {
+	printf("cached operator with index as key initialized\n");
+	printf("number of unique and cached collapse mode: %zu\n", n_collapse_mode_sum);
+    }
+}
+
+
+template<class SourceInfoType, class TargetInfoType>
+double CachedConstantCOperatorWithIndexAsKey<SourceInfoType, TargetInfoType>::get_gamma_sum(const StateSpace& state_space, const MyIndexType source_sindex, const double t) const
+{
+    auto it = sum_cache_.find(source_sindex);
+    if (it == sum_cache_.end()) {
+	return 0.0;
+    } else {
+	return it->second;
+    }
+}
+
+
+template<class SourceInfoType, class TargetInfoType>
+CollapseGamma CachedConstantCOperatorWithIndexAsKey<SourceInfoType, TargetInfoType>::get_gamma(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType target_sindex, const double t) const
+{
+    auto it_0 = to_rho_cache_.find(source_sindex);
+
+    if (it_0 == to_rho_cache_.end()) {
+	return 0.0;
+    }
+
+    auto it_1 = it_0->second.find(target_sindex);
+
+    if (it_1 == it_0->second.end()) {
+	return 0.0;
+    }
+
+    return it_1->second;
+}
+
+
+template<class SourceInfoType, class TargetInfoType>
+bool CachedConstantCOperatorWithIndexAsKey<SourceInfoType, TargetInfoType>::is_gamma_nonzero(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType target_sindex) const
+{
+    return this->get_gamma(state_space, source_sindex, target_sindex, 0).gamma != 0.0;
+}
+
+
+template<class SourceInfoType, class TargetInfoType>
+CollapseGamma CachedConstantCOperatorWithIndexAsKey<SourceInfoType, TargetInfoType>::get_gamma_to_outer_state(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType outer_target_index, const double t) const
+{
+    auto it_0 = to_phi_cache_.find(source_sindex);
+
+    if (it_0 == to_phi_cache_.end()) {
+	return 0.0;
+    }
+
+    auto it_1 = it_0->second.find(outer_target_index);
+
+    if (it_1 == it_0->second.end()) {
+	return 0.0;
+    }
+
+    return it_1->second;
+}
+
+
+template<class SourceInfoType, class TargetInfoType>
+bool CachedConstantCOperatorWithIndexAsKey<SourceInfoType, TargetInfoType>::is_gamma_to_outer_state_nonzero(const StateSpace& state_space, const MyIndexType source_sindex, const MyIndexType outer_target_index) const
+{
+    return this->get_gamma_to_outer_state(state_space, source_sindex, outer_target_index, 0).gamma != 0.0;
+}
+
+
+template<class SourceInfoType, class TargetInfoType>
 class RuntimeCalculatingConstantCOperator : public IConstantCollapseImpl<SourceInfoType, TargetInfoType>
 {
 public:
-    void initialize(const StateSpace& state_space, const MyIndexType source_sindex_start, const MyIndexType source_sindex_end) override { }
+    void initialize(const StateSpace& state_space, const MyIndexType source_sindex_start, const MyIndexType source_sindex_end, const MyIndexType target_sindex_start, const MyIndexType target_sindex_end, const MyIndexType outer_target_index_start, const MyIndexType outer_target_index_end) override { }
 };
 
 
