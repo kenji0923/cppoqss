@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <boost/mpi.hpp>
+#include <boost/serialization/array.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/unordered_map.hpp>
 
@@ -249,10 +250,12 @@ OdeLindbladMasterMPI::OdeLindbladMasterMPI(DensityMatrix& density_matrix)
     // Prepare Hamiltonian matrix
     // 
     rho_n_dim_ = density_matrix_.get_n_dim_rho();
-    rho_ownership_range_row_ = Hmat_.get_ownership_range_row();
+    rho_ownership_range_row_ = density_matrix_.get_rho().get_ownership_range_row();
     rho_n_ownership_row_ = rho_ownership_range_row_[1] - rho_ownership_range_row_[0];
 
     phi_n_dim_ = density_matrix_.get_n_dim_phi();
+    phi_ownership_range_ = density_matrix_.get_phi().get_ownership_range();
+    phi_n_ownership_ = phi_ownership_range_[1] - phi_ownership_range_[0];
 
     MyIndexType current_row = -1;
     ProgressBar::InitBar("prepare Hamiltonian", rho_n_ownership_row_);
@@ -305,34 +308,45 @@ OdeLindbladMasterMPI::OdeLindbladMasterMPI(DensityMatrix& density_matrix)
 
     ProgressBar::InitBar("scan c-operator", rho_n_ownership_row_);
 
+    std::vector<std::array<MyIndexType, 2>> rho_ownership_range_row_of_each_rank;
+    boost::mpi::all_gather(mpi_helper::world, rho_ownership_range_row_, rho_ownership_range_row_of_each_rank);
+
+    std::vector<std::array<MyIndexType, 2>> phi_ownership_range_of_each_rank;
+    boost::mpi::all_gather(mpi_helper::world, phi_ownership_range_, phi_ownership_range_of_each_rank);
+
     for (MyIndexType i = rho_ownership_range_row_[0]; i < rho_ownership_range_row_[1]; ++i) {
 	for (auto& analyzed_c_operator : analyzed_c_operators_) {
 	    const ICOperator& c_op = analyzed_c_operator.c_operator.get();
 
-	    for (MyIndexType j = 0; j < rho_n_dim_; ++j) {
-		const bool is_gamma_nonzero = c_op.is_gamma_nonzero(density_matrix_.state_space_, i, j);
+	    for (size_t i_rank = 0; i_rank < mpi_helper::get_size(); ++i_rank) {
+		const MyIndexType j_start = rho_ownership_range_row_of_each_rank[i_rank][0];
+		const MyIndexType j_end = rho_ownership_range_row_of_each_rank[i_rank][1];
 
-		if (is_gamma_nonzero) {
-		    if (c_op.is_constant()) analyzed_c_operator.state_with_nonzero_constant_collapse.emplace(i);
-		    else analyzed_c_operator.state_with_nonzero_variable_collapse.emplace(i);
+		for (MyIndexType j = j_start; j < j_end; ++j) {
+		    const bool is_gamma_nonzero = c_op.is_gamma_nonzero(density_matrix_.state_space_, i, j);
 
-		    analyzed_c_operator.nonzero_collapse_pairs.try_emplace(i);
-		    analyzed_c_operator.nonzero_collapse_pairs.at(i).emplace(j);
+		    if (is_gamma_nonzero) {
+			if (c_op.is_constant()) analyzed_c_operator.state_with_nonzero_constant_collapse.emplace(i);
+			else analyzed_c_operator.state_with_nonzero_variable_collapse.emplace(i);
 
-		    // analyzed_c_operator.cached_gamma.try_emplace(i);
-		    // analyzed_c_operator.cached_gamma.at(i).emplace(j, c_op.get_gamma(density_matrix_.state_space_, i, j, 0).get_fill_gamma());
+			analyzed_c_operator.nonzero_collapse_pairs[i][i_rank].emplace(j);
+		    }
 		}
 	    }
 
-	    for (MyIndexType j = 0; j < phi_n_dim_; ++j) {
-		const bool is_gamma_nonzero = c_op.is_gamma_to_outer_state_nonzero(density_matrix_.state_space_, i, j);
+	    for (size_t i_rank = 0; i_rank < mpi_helper::get_size(); ++i_rank) {
+		const MyIndexType j_start = phi_ownership_range_of_each_rank[i_rank][0];
+		const MyIndexType j_end = phi_ownership_range_of_each_rank[i_rank][1];
 
-		if (is_gamma_nonzero) {
-		    if (c_op.is_constant()) analyzed_c_operator.state_with_nonzero_constant_collapse.emplace(i);
-		    else analyzed_c_operator.state_with_nonzero_variable_collapse.emplace(i);
+		for (MyIndexType j = j_start; j < j_end; ++j) {
+		    const bool is_gamma_nonzero = c_op.is_gamma_to_outer_state_nonzero(density_matrix_.state_space_, i, j);
 
-		    analyzed_c_operator.nonzero_collapse_pairs_to_outer_state.try_emplace(i);
-		    analyzed_c_operator.nonzero_collapse_pairs_to_outer_state.at(i).emplace(j);
+		    if (is_gamma_nonzero) {
+			if (c_op.is_constant()) analyzed_c_operator.state_with_nonzero_constant_collapse.emplace(i);
+			else analyzed_c_operator.state_with_nonzero_variable_collapse.emplace(i);
+
+			analyzed_c_operator.nonzero_collapse_pairs_to_outer_state[i][i_rank].emplace(j);
+		    }
 		}
 	    }
 	}
@@ -342,10 +356,12 @@ OdeLindbladMasterMPI::OdeLindbladMasterMPI(DensityMatrix& density_matrix)
 
     size_t n_collapse_pair = 0;
 
-    auto count_collapse_pair = [&n_collapse_pair](const std::unordered_map<MyIndexType, std::unordered_set<MyIndexType>>& collapse_pair)
+    auto count_collapse_pair = [&n_collapse_pair](const std::unordered_map<MyIndexType, std::unordered_map<size_t, std::unordered_set<MyIndexType>>>& collapse_pair)
     {
-	for (const auto& pair_i_jset : collapse_pair) {
-	    n_collapse_pair += pair_i_jset.second.size();
+	for (const auto& [i, map_rank_to_jset] : collapse_pair) {
+	    for (const auto& [i_rank, jset] : map_rank_to_jset) {
+		n_collapse_pair += jset.size();
+	    }
 	}
     };
 
@@ -367,6 +383,10 @@ OdeLindbladMasterMPI::OdeLindbladMasterMPI(DensityMatrix& density_matrix)
     Logger::kLogger.add_stage("EvalH");
     Logger::kLogger.add_stage("HByRho");
     Logger::kLogger.add_stage("FillL");
+    Logger::kLogger.add_stage("FillL0");
+    Logger::kLogger.add_stage("FillL1");
+    Logger::kLogger.add_stage("FillL2");
+    Logger::kLogger.add_stage("FillL3");
 }
 
 
@@ -531,6 +551,8 @@ void OdeLindbladMasterMPI::fill_orig_rho(const State& x, const double t) const
 
 void OdeLindbladMasterMPI::fill_liouvillian(const double t, MyMat& Drho_Dt, MyVec& Dphi_Dt, const std::vector<const MyMat*>& nonzero_place_source_for_Drho_Dt) const
 {
+    Logger::kLogger.push("FillL0");
+
     //  
     // Collapse rates.
     // i -> . with gamma.
@@ -540,11 +562,11 @@ void OdeLindbladMasterMPI::fill_liouvillian(const double t, MyMat& Drho_Dt, MyVe
   
     // 
     // Fill rates.
-    // . -> j with rate.
-    // Mapping j: rate.
+    // index: rank
+    // key: j, value: rate
     // 
-    std::unordered_map<MyIndexType, double> rate_to_j;
-    std::unordered_map<MyIndexType, double> rate_to_outer_j;
+    std::vector<std::unordered_map<MyIndexType, double>> rate_to_j(mpi_helper::get_size());
+    std::vector<std::unordered_map<MyIndexType, double>> rate_to_outer_j(mpi_helper::get_size());
 
     // 
     // Calculate gamma and rates.
@@ -561,45 +583,44 @@ void OdeLindbladMasterMPI::fill_liouvillian(const double t, MyMat& Drho_Dt, MyVe
 	    gamma_from_i.at(i) += c_op.get_gamma_sum(density_matrix_.state_space_, i, t);
 	}
 
-	for (const auto& pair_i_jset : analyzed_c_operator.nonzero_collapse_pairs) {
-	    const MyIndexType i = pair_i_jset.first;
-	    const auto& jset = pair_i_jset.second;
-
+	for (const auto& [i, map_rank_to_jset] : analyzed_c_operator.nonzero_collapse_pairs) {
 	    const double rho_ii = std::real(rho_diag_part_row.values_ptr[i - rho_ownership_range_row_[0]]);
+
 	    if (rho_ii == 0.0) continue;
 
-	    // const std::unordered_map<MyIndexType, double>& map_j_gamma = analyzed_c_operator.cached_gamma.at(i);
-
-	    for (const auto& j : jset) {
-		if (rho_ii != 0.0) {
+	    for (const auto& [i_rank, jset] : map_rank_to_jset) {
+		for (const auto& j : jset) {
 		    const double gamma = c_op.get_gamma(density_matrix_.state_space_, i, j, t).get_fill_gamma();
-		    // const double gamma = map_j_gamma.at(j);
-		    
+
 		    const double fill_rate = rho_ii * gamma;
 
-		    rate_to_j.try_emplace(j, 0.0);
-		    rate_to_j.at(j) += fill_rate;
+		    rate_to_j[i_rank].try_emplace(j, 0.0);
+		    rate_to_j[i_rank][j] += fill_rate;
 		}
 	    }
 	}
 
-	for (const auto& pair_i_jset : analyzed_c_operator.nonzero_collapse_pairs_to_outer_state) {
-	    const MyIndexType i = pair_i_jset.first;
-	    const auto& jset = pair_i_jset.second;
-
+	for (const auto& [i, map_rank_to_jset] : analyzed_c_operator.nonzero_collapse_pairs_to_outer_state) {
 	    const double rho_ii = std::real(rho_diag_part_row.values_ptr[i - rho_ownership_range_row_[0]]);
+
 	    if (rho_ii == 0.0) continue;
 
-	    for (const auto& j : jset) {
-		const double gamma = c_op.get_gamma_to_outer_state(density_matrix_.state_space_, i, j, t).get_fill_gamma();
-		const double fill_rate = rho_ii * gamma;
+	    for (const auto& [i_rank, jset] : map_rank_to_jset) {
+		for (const auto& j : jset) {
+		    const double gamma = c_op.get_gamma_to_outer_state(density_matrix_.state_space_, i, j, t).get_fill_gamma();
 
-		rate_to_outer_j.try_emplace(j, 0.0);
-		rate_to_outer_j.at(j) += fill_rate;
+		    const double fill_rate = rho_ii * gamma;
+
+		    rate_to_outer_j[i_rank].try_emplace(j, 0.0);
+		    rate_to_outer_j[i_rank][j] += fill_rate;
+		}
 	    }
 	}
     }
 
+    Logger::kLogger.pop();
+
+    Logger::kLogger.push("FillL1");
 
     // 
     // Initialize Drho_dt
@@ -617,23 +638,32 @@ void OdeLindbladMasterMPI::fill_liouvillian(const double t, MyMat& Drho_Dt, MyVe
 	    );
     }
 
-    for (size_t rank = 0; rank < mpi_helper::get_size(); ++rank) {
-	std::unordered_map<MyIndexType, double> rate_to_j_received;
-	if (rank == mpi_helper::get_rank()) {
-	    rate_to_j_received = rate_to_j;
-	}
-	boost::mpi::broadcast(mpi_helper::world, rate_to_j_received, rank);
+    Logger::kLogger.pop();
 
-	for (const auto& pair_j_rate : rate_to_j_received) {
-	    const MyIndexType j = pair_j_rate.first;
-	    if (rho_ownership_range_row_[0] <= j && j < rho_ownership_range_row_[1]) {
-		Drho_Dt_nonzero_cols.try_emplace(j);
-		Drho_Dt_nonzero_cols.at(j).emplace(j);
+    Logger::kLogger.push("FillL2");
+
+    for (size_t i_rank = 0; i_rank < mpi_helper::get_size(); ++i_rank) {
+	if (i_rank == mpi_helper::get_rank()) {
+	    std::vector<std::unordered_map<MyIndexType, double>> rate_to_j_received;
+
+	    boost::mpi::gather(mpi_helper::world, rate_to_j[i_rank], rate_to_j_received, i_rank);
+
+	    for (const auto& map_rate_to_j : rate_to_j_received) {
+		for (const auto& [j, rate] : map_rate_to_j) {
+		    Drho_Dt_nonzero_cols[j].emplace(j);
+		}
 	    }
+	} else {
+	    boost::mpi::gather(mpi_helper::world, rate_to_j[i_rank], i_rank);
 	}
     }
 
+    Logger::kLogger.pop();
+
+    Logger::kLogger.push("FillL3");
+
     MyMat::NonzeroNumbers Drho_Dt_number_of_nonzeros(rho_n_ownership_row_);
+
     for (MyIndexType i = rho_ownership_range_row_[0]; i < rho_ownership_range_row_[1]; ++i) {
 	if (Drho_Dt_nonzero_cols.find(i) == Drho_Dt_nonzero_cols.end()) continue;
 
@@ -667,22 +697,18 @@ void OdeLindbladMasterMPI::fill_liouvillian(const double t, MyMat& Drho_Dt, MyVe
     //  
     // Calculate Liouvillian rank-by-rank
     //  
-    for (size_t rank = 0; rank < mpi_helper::get_size(); ++rank) {
+    
+    for (size_t i_rank = 0; i_rank < mpi_helper::get_size(); ++i_rank) {
 	std::unordered_map<MyIndexType, double> gamma_from_i_received;
-	std::unordered_map<MyIndexType, double> rate_to_j_received;
-	std::unordered_map<MyIndexType, double> rate_to_outer_j_received;
-	if (rank == mpi_helper::get_rank()) {
+	
+	if (i_rank == mpi_helper::get_rank()) {
 	    gamma_from_i_received = std::move(gamma_from_i);
-	    rate_to_j_received = std::move(rate_to_j);
-	    rate_to_outer_j_received = std::move(rate_to_outer_j);
 	}
 
-	boost::mpi::broadcast(mpi_helper::world, gamma_from_i_received, rank);
-	boost::mpi::broadcast(mpi_helper::world, rate_to_j_received, rank);
-	boost::mpi::broadcast(mpi_helper::world, rate_to_outer_j_received, rank);
+	boost::mpi::broadcast(mpi_helper::world, gamma_from_i_received, i_rank);
 
 	auto rho_ownership_range_row = Drho_Dt.get_ownership_range_row();
-	boost::mpi::broadcast(mpi_helper::world, rho_ownership_range_row, rank);
+	boost::mpi::broadcast(mpi_helper::world, rho_ownership_range_row, i_rank);
 
 	orig_rho_.loop_by_row(
 		[&Drho_Dt, &gamma_from_i_received](const MyIndexType i, const MyIndexType n_col, const MyIndexType* cols_ptr, const MyElementType* values_ptr)
@@ -714,28 +740,56 @@ void OdeLindbladMasterMPI::fill_liouvillian(const double t, MyMat& Drho_Dt, MyVe
 		}
 	    );
 
-	for (MyIndexType i = rho_ownership_range_row_[0]; i < rho_ownership_range_row_[1]; ++i) {
-	    const MyIndexType j = i;
-	    if (rate_to_j_received.find(j) != rate_to_j_received.end()) {
-		MyElementType fill_value = rate_to_j_received.at(j);
-		Drho_Dt.add_values(1, &i, 1, &j, &fill_value);
+
+	std::unordered_map<MyIndexType, double> rate_to_j_received;
+
+	{
+	    std::vector<boost::mpi::request> reqs;
+
+	    if (i_rank == mpi_helper::get_rank()) {
+		for (size_t s_rank = 0; s_rank < mpi_helper::get_size(); ++s_rank) {
+		    reqs.emplace_back(mpi_helper::world.isend(s_rank, 0, rate_to_j[s_rank]));
+		}
 	    }
+
+	    reqs.emplace_back(mpi_helper::world.irecv(i_rank, 0, rate_to_j_received));
+
+	    boost::mpi::wait_all(reqs.begin(), reqs.end());
 	}
+
+	for (const auto& [j, rate] : rate_to_j_received) {
+	    const MyIndexType i = j;
+
+	    MyElementType fill_value = rate; 
+
+	    Drho_Dt.add_values(1, &i, 1, &j, &fill_value);
+	}
+
 
 	std::vector<MyIndexType> Dphi_Dt_fill_indices;
 	std::vector<MyElementType> Dphi_Dt_fill_values;
-	Dphi_Dt.loop_over_elements(
-		[&Dphi_Dt, &rate_to_outer_j_received, &Dphi_Dt_fill_indices, &Dphi_Dt_fill_values](const MyIndexType i, const MyElementType value)
-		{
-		    const MyIndexType j = i;
-		    if (rate_to_outer_j_received.find(j) != rate_to_outer_j_received.end()) {
-			MyElementType fill_value = rate_to_outer_j_received.at(j);
 
-			Dphi_Dt_fill_indices.push_back(j);
-			Dphi_Dt_fill_values.push_back(fill_value);
-		    }
+	std::unordered_map<MyIndexType, double> rate_to_outer_j_received;
+
+	{
+	    std::vector<boost::mpi::request> reqs;
+
+	    if (i_rank == mpi_helper::get_rank()) {
+		for (size_t s_rank = 0; s_rank < mpi_helper::get_size(); ++s_rank) {
+		    reqs.emplace_back(mpi_helper::world.isend(s_rank, 1, rate_to_outer_j[s_rank]));
 		}
-	    );
+	    }
+
+	    reqs.emplace_back(mpi_helper::world.irecv(i_rank, 1, rate_to_outer_j_received));
+
+	    boost::mpi::wait_all(reqs.begin(), reqs.end());
+	}
+
+	for (const auto& [j, rate] : rate_to_outer_j_received) {
+	    Dphi_Dt_fill_indices.push_back(j);
+	    Dphi_Dt_fill_values.push_back(rate);
+	}
+
 	Dphi_Dt.add_values(Dphi_Dt_fill_indices.size(), &Dphi_Dt_fill_indices[0], &Dphi_Dt_fill_values[0]);
     }
 
@@ -746,6 +800,8 @@ void OdeLindbladMasterMPI::fill_liouvillian(const double t, MyMat& Drho_Dt, MyVe
     Dphi_Dt.end_assembly();
 
     rho_diag_part_vec.restore_row(rho_diag_part_row);
+
+    Logger::kLogger.pop();
 }
 
 
