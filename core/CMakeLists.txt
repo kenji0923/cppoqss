@@ -114,6 +114,7 @@ target_link_libraries(OdeSystem PUBLIC
 )
 target_link_libraries(OdeSystem PRIVATE
     Logger
+    StateSpace
     StateSystemName
 )
 

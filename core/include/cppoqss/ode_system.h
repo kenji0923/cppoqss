@@ -123,16 +123,17 @@ public:
     void multiply_constant_collapse_prob(State& state, const double t) const;
 
 private:
-    struct AnalyzedCOperator
-    {
-	AnalyzedCOperator(const std::reference_wrapper<const ICOperator>& c_operator) : c_operator(c_operator) { }
-
-	const std::reference_wrapper<const ICOperator> c_operator;
-	std::unordered_set<MyIndexType> state_with_nonzero_constant_collapse;
-	std::unordered_set<MyIndexType> state_with_nonzero_variable_collapse;
-	std::unordered_map<MyIndexType, std::unordered_set<MyIndexType>> nonzero_collapse_pairs;
-	std::unordered_map<MyIndexType, std::unordered_set<MyIndexType>> nonzero_collapse_pairs_to_outer_state;
-    };
+    // TODO DEL
+ //    struct AnalyzedCOperator
+ //    {
+	// AnalyzedCOperator(const std::reference_wrapper<const ICOperator>& c_operator) : c_operator(c_operator) { }
+	// 
+	// const std::reference_wrapper<const ICOperator> c_operator;
+	// std::unordered_set<MyIndexType> state_with_nonzero_constant_collapse;
+	// std::unordered_set<MyIndexType> state_with_nonzero_variable_collapse;
+	// std::unordered_map<MyIndexType, std::unordered_set<MyIndexType>> nonzero_collapse_pairs;
+	// std::unordered_map<MyIndexType, std::unordered_set<MyIndexType>> nonzero_collapse_pairs_to_outer_state;
+ //    };
 
     void evaluate_hamiltonian(const double t) const;
     void multiply_constant_collapse_prob(MyMat& mat, const double t, bool is_inverting_prob) const;
@@ -143,12 +144,20 @@ private:
     const IOperator& hamiltonian_;
 
     mutable MyMat Hmat_;
+    // TODO delete after initialization
     SparseMatrixNonzeroStruct Hmat_nonzero_struct_;
 
-    std::vector<AnalyzedCOperator> analyzed_c_operators_;
+    // TODO DEL
+    // std::vector<AnalyzedCOperator> analyzed_c_operators_;
+    std::unordered_map<MyIndexType, double> constant_collapse_gamma_sum_;
+    MyMat constant_fill_by_collapse_to_rho_;
+    MyMat constant_fill_by_collapse_to_phi_;
+    // TODO implement variable collapse
+    // mutable MyVec variable_collapse_gamma_;
+    // mutable MyMat variable_fill_to_rho_;
+    // mutable MyMat variable_fill_to_phi_;
 
     mutable MyMat orig_rho_;
-    mutable MyVec diag_rho_;
 
     mutable double t0_for_multiply_collapse_prob_;
 

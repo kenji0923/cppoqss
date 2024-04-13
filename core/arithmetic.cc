@@ -251,11 +251,17 @@ void MyVec::initialize_by_owned()
 }
 
 MyMat::Ownership::Ownership(const Mat& mat)
+:   n_dim_row(0),
+    n_dim_col(0),
+    n_row(0),
+    n_col(0)
 {
   if (mat) {
     MyIndexType m, n;
     MatGetSize(mat, &m, &n);
-    assert(m == n);
+
+    n_dim_row = m;
+    n_dim_col = n;
 
     MyIndexType n_ownership_row = PETSC_DECIDE;
     PetscSplitOwnership(PETSC_COMM_WORLD, &n_ownership_row, &m);
@@ -267,15 +273,9 @@ MyMat::Ownership::Ownership(const Mat& mat)
     range_row[0] = row_start;
     range_row[1] = row_end;
 
-    n_dim = m;
     n_col = n;
     range_col[0] = 0;
     range_col[1] = n;
-  } else {
-    n_dim = 0;
-    n_col = 0;
-    range_col[0] = 0;
-    range_col[1] = 0;
   }
 }
 
@@ -283,7 +283,6 @@ std::tuple<MyIndexType, MyIndexType> MyMat::get_ownership_range_before_prealloca
 {
   MyIndexType m, n;
   MatGetSize(mat.mat_, &m, &n);
-  assert(m == n);
 
   MyIndexType n_ownership_row = PETSC_DECIDE;
   PetscSplitOwnership(PETSC_COMM_WORLD, &n_ownership_row, &m);
@@ -332,10 +331,21 @@ MyMat::MyMat(const MyIndexType n_dim, bool is_hermite)
 }
 
 
+MyMat::MyMat(const MyIndexType n_dim_row, const MyIndexType n_dim_col, bool is_hermite)
+: mat_(nullptr), mat_owned_(nullptr), is_hermite_(is_hermite)
+{
+    MatCreate(PETSC_COMM_WORLD, &mat_owned_);
+    MatSetSizes(mat_owned_, PETSC_DECIDE, PETSC_DECIDE, n_dim_row, n_dim_col);
+    MatSetType(mat_owned_, DefaultMatType);
+    if (is_hermite) MatSetOption(mat_owned_, MAT_HERMITIAN, PETSC_TRUE);
+
+    initialize_by_owned();
+}
+
+
 MyMat::MyMat(const Mat mat)
 : mat_(mat), mat_owned_(nullptr), ownership_info_(mat), is_hermite_(false)
-{
-}
+{ }
 
 
 MyMat::MyMat(const std::filesystem::path& read_path, const off_t offset)
@@ -479,6 +489,17 @@ MyVec MyMat::get_diagonal_to_local_vector() const
 }
 
 
+MyIndexType MyMat::get_n_dim() const
+{
+    if (get_n_dim_row() != get_n_dim_col()) {
+	std::cerr << "not square matrix" << std::endl;
+	exit(1);
+    }
+
+    return get_n_dim_row();
+}
+
+
 MyIndexType MyMat::get_number_of_nonzeros() const
 {
     MyIndexType number_of_nonzeros = 0;
@@ -596,6 +617,17 @@ MyMat& MyMat::scale(const MyElementType scale_factor)
     return *this;
 }
 
+
+MyVec MyMat::multiply(const MyVec& vec) const
+{
+    MyVec result(ownership_info_.n_dim_row);
+
+    MatMult(mat_, vec.vec_, result.vec_);
+
+    return result;
+}
+
+
 void MyMat::set_preallocation(const NonzeroNumbers& nonzero_numbers)
 {
   set_preallocation(0, &nonzero_numbers.diag[0], 0, &nonzero_numbers.nondiag[0]);
@@ -630,22 +662,28 @@ void MyMat::loop_by_row(std::function<void(const MyIndexType, const MyIndexType,
   if (is_hermite_) MatRestoreRowUpperTriangular(mat_);
 }
 
+
 void MyMat::loop_over_nonzero_elements(std::function<void(const MyIndexType i, const MyIndexType j, const MyElementType element)> process) const
 {
-  if (is_hermite_) MatGetRowUpperTriangular(mat_);
-  for (MyIndexType i = ownership_info_.range_row[0]; i < ownership_info_.range_row[1]; ++i) {
-    MyIndexType ncols;
-    const MyIndexType *cols;
-    const MyElementType *vals;
+    if (is_hermite_) MatGetRowUpperTriangular(mat_);
 
-    MatGetRow(mat_, i, &ncols, &cols, &vals);
-    for (MyIndexType jj = 0; jj < ncols; ++jj) {
-      process(i, cols[jj], vals[jj]);
+    for (MyIndexType i = ownership_info_.range_row[0]; i < ownership_info_.range_row[1]; ++i) {
+	MyIndexType ncols;
+	const MyIndexType *cols;
+	const MyElementType *vals;
+
+	MatGetRow(mat_, i, &ncols, &cols, &vals);
+
+	for (MyIndexType jj = 0; jj < ncols; ++jj) {
+	    process(i, cols[jj], vals[jj]);
+	}
+
+	MatRestoreRow(mat_, i, &ncols, &cols, &vals);
     }
-    MatRestoreRow(mat_, i, &ncols, &cols, &vals);
-  }
-  if (is_hermite_) MatRestoreRowUpperTriangular(mat_);
+
+    if (is_hermite_) MatRestoreRowUpperTriangular(mat_);
 }
+
 
 void MyMat::modify_nonzero_elements(std::function<MyElementType(const MyIndexType, const MyIndexType, const MyElementType)> modifier)
 {
@@ -684,11 +722,17 @@ MyMat::NonzeroNumbers MyMat::get_nonzero_numbers(std::function<bool(const MyInde
   std::vector<MyIndexType> n_diag_nonzero(ownership_info_.n_row, 0);
   std::vector<MyIndexType> n_nondiag_nonzero(ownership_info_.n_row, 0);
 
+  MyIndexType n_ownership_col = PETSC_DECIDE;
+  PetscSplitOwnership(PETSC_COMM_WORLD, &n_ownership_col, &ownership_info_.n_dim_col);
+
+  const MyIndexType col_start = boost::mpi::scan(mpi_helper::world, n_ownership_col, std::plus<MyIndexType>()) - n_ownership_col;
+  const MyIndexType col_end = col_start + n_ownership_col;
+
   loop_over_elements(
-      [&n_diag_nonzero, &n_nondiag_nonzero, &checker_gives_true_if_nonzero, this](const MyIndexType i, const MyIndexType j) {
+      [&n_diag_nonzero, &n_nondiag_nonzero, &col_start, &col_end, &checker_gives_true_if_nonzero, this](const MyIndexType i, const MyIndexType j) {
         if (checker_gives_true_if_nonzero(i, j)) {
           const MyIndexType ii = i - this->ownership_info_.range_row[0];
-          if (this->ownership_info_.range_row[0] <= j && j < this->ownership_info_.range_row[1]) {
+          if (col_start <= j && j < col_end) {
             ++n_diag_nonzero[ii];
           } else {
             ++n_nondiag_nonzero[ii];

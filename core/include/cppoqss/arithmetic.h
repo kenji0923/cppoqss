@@ -53,6 +53,8 @@ struct MyRow
 class MyVec : IsRequireMPI
 {
 public:
+    friend class MyMat;
+
     struct Ownership
     {
 	Ownership() { }
@@ -94,7 +96,7 @@ public:
     void restore_row(MyRow& row) const;
 
     /**
-     * Accepts (index, value) -> void
+     * Accepts (i, element) -> void
      */
     void loop_over_elements(std::function<void(const MyIndexType, const MyElementType)> process) const;
 
@@ -126,9 +128,12 @@ public:
 	Ownership() { }
 	Ownership(const Mat& mat);
 
-	MyIndexType n_dim;
+	MyIndexType n_dim_row;
+	MyIndexType n_dim_col;
+
 	MyIndexType n_row;
 	std::array<MyIndexType, 2> range_row;
+
 	MyIndexType n_col;
 	std::array<MyIndexType, 2> range_col;
     };
@@ -149,6 +154,7 @@ public:
     static MatType DefaultMatType;
 
     MyMat(const MyIndexType n_dim, bool is_hermite=false);
+    MyMat(const MyIndexType n_dim_row, const MyIndexType n_dim_col, bool is_hermite=false);
     MyMat(const Mat mat);
     MyMat(const std::filesystem::path& read_path, const off_t offset);
     MyMat(const MyMat& rh);
@@ -165,9 +171,11 @@ public:
     MyVec get_diagonal() const;
     MyVec get_diagonal_to_local_vector() const;
 
-    MyIndexType get_n_dim() const { return ownership_info_.n_dim; }
+    MyIndexType get_n_dim() const;
+    MyIndexType get_n_dim_row() const { return ownership_info_.n_dim_row; }
     MyIndexType get_n_ownership_row() const { return ownership_info_.n_row; }
     const auto& get_ownership_range_row() const { return ownership_info_.range_row; }
+    MyIndexType get_n_dim_col() const { return ownership_info_.n_dim_col; }
     MyIndexType get_n_ownership_col() const { return ownership_info_.n_col; }
     const auto& get_ownership_range_col() const { return ownership_info_.range_col; }
 
@@ -183,6 +191,8 @@ public:
     MyMat& add_ax(const MyElementType a, const MyMat& x);
     MyMat& add_to_all_elements(const MyElementType add_value);
     MyMat& scale(const MyElementType scale_factor);
+
+    MyVec multiply(const MyVec& vec) const;
 
     void set_preallocation(const NonzeroNumbers& nonzero_numbers);
     void set_preallocation(const MyIndexType n_diag_nonzero, const MyIndexType* array_diag_nonzero, const MyIndexType n_nondiag_nonzero, const MyIndexType* array_nondiag_nonzero);
